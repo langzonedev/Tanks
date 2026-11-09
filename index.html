@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#111a20">
+  <meta name="description" content="A turn-based artillery duel by Lang Systems. Plan your shot, reshape the battlefield, and be the last tank standing.">
+  <title>Tanks · Lang Systems</title>
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <header class="masthead">
+    <a class="wordmark" href="./" aria-label="Tanks home">
+      <img src="./icon.svg" width="38" height="38" alt="">
+      <span>TANKS<small>LANG SYSTEMS ARCADE</small></span>
+    </a>
+    <div class="mast-actions">
+      <span class="top-badge"><i></i> FIELD EDITION 01</span>
+      <button id="sound" type="button" class="quiet" aria-pressed="false">Sound off</button>
+      <button id="menu-button" type="button" class="quiet" hidden>Match setup</button>
+    </div>
+  </header>
+  <main class="layout">
+    <section class="field-column" aria-label="Battlefield">
+      <div id="intro" class="intro">
+        <p class="eyebrow"><span></span> LANG SYSTEMS / ARCADE 01</p>
+        <h1>TANKS<span>.</span></h1>
+        <p class="tagline">One shot changes the map.</p>
+        <p class="lede">Read the wind. Find your angle. Take turns reshaping the battlefield until only one tank stands.</p>
+      </div>
+      <div id="players" class="players" aria-label="Tank health" hidden></div>
+      <div class="viewport">
+        <div class="field-bar">
+          <span><i></i><b id="map-label">BADLANDS</b></span>
+          <span id="wind-label">FIELD PREVIEW</span>
+          <span id="turn-label">SECTOR 01</span>
+        </div>
+        <canvas id="field" tabindex="-1" width="1200" height="600" aria-label="Side-on battlefield with tanks and destructible terrain"></canvas>
+        <div class="field-caption">
+          <span id="field-hint">SURVEY FEED / TERRAIN PREVIEW</span>
+          <span id="seed-label"></span>
+        </div>
+      </div>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <details class="manual">
+        <summary>Field manual</summary>
+        <div>
+          <p>Move within your fuel allowance, set angle and power, then fire once. A short dotted trail shows the launch direction. Wind bends your shot. Craters remove cover and can drop tanks into lower ground.</p>
+          <p><b>Keyboard</b> A / D to move, ← / → to aim, ↑ / ↓ for power, Space to fire. You can also drag on the battlefield to aim or use the controls.</p>
+          <p><b>Share turns</b> After firing, send the next-turn link to your opponent. Opening that link reconstructs the match so they can take their shot and send a new link back.</p>
+        </div>
+      </details>
+    </section>
+
+    <aside id="setup" class="panel">
+      <p class="eyebrow"><span></span> MATCH SETUP</p>
+      <h2>Choose your battlefield</h2>
+      <div id="import" class="import-card" hidden>
+        <p id="import-info"></p>
+        <button id="import-button" type="button" class="secondary">Open shared turn</button>
+      </div>
+      <div id="map-options" class="map-options" role="group" aria-label="Battlefield map"></div>
+      <label class="label" for="mode">PLAY MODE</label>
+      <select id="mode">
+        <option value="local">Pass &amp; play · one device</option>
+        <option value="link">Share turns · separate devices</option>
+      </select>
+      <label class="label" for="count">PLAYERS</label>
+      <select id="count">
+        <option value="2">2 players</option>
+        <option value="3">3 players</option>
+        <option value="4">4 players</option>
+      </select>
+      <p id="mode-help" class="helper">Take turns on this screen with up to four players.</p>
+      <button id="start" type="button" class="primary">Start match <span aria-hidden="true">↗</span></button>
+      <button id="resume" type="button" class="secondary" hidden>Resume saved match</button>
+      <p id="setup-notice" class="notice" role="status" hidden></p>
+    </aside>
+
+    <aside id="command" class="panel" hidden>
+      <p class="eyebrow"><span></span> FIRE CONTROL</p>
+      <h2 id="active-title">Player turn</h2>
+      <div id="controls">
+        <div class="range-row">
+          <label for="angle">ANGLE</label><output id="angle-value" for="angle">42°</output>
+          <input id="angle" type="range" min="0" max="180" value="42">
+        </div>
+        <div class="range-row">
+          <label for="power">POWER</label><output id="power-value" for="power">68%</output>
+          <input id="power" type="range" min="10" max="100" value="68">
+        </div>
+        <div class="range-row">
+          <label for="move">REPOSITION</label><output id="move-value" for="move">0 m</output>
+          <input id="move" type="range" min="-90" max="90" value="0">
+        </div>
+        <p class="label">ARSENAL</p>
+        <div id="weapons" class="weapons" role="group" aria-label="Weapon"></div>
+        <p id="weapon-info" class="helper"></p>
+        <button id="fire" type="button" class="primary">Fire <span aria-hidden="true">↗</span></button>
+      </div>
+      <div id="handoff" class="handoff" hidden>
+        <p id="handoff-copy"></p>
+        <button id="copy" type="button" class="primary">Copy next-turn link <span aria-hidden="true">↗</span></button>
+        <label class="label" for="share-url">TURN LINK</label>
+        <input id="share-url" type="text" readonly>
+        <button id="continue" type="button" class="secondary">Play next turn here</button>
+      </div>
+      <div id="result" class="result" hidden>
+        <p id="result-copy"></p>
+        <button id="rematch" type="button" class="primary">Rematch <span aria-hidden="true">↗</span></button>
+        <button id="result-menu" type="button" class="secondary">Change battlefield</button>
+      </div>
+    </aside>
+  </main>
+  <footer>
+    <a href="https://langsystems.com.au/" target="_blank" rel="noopener noreferrer">LANG SYSTEMS <span aria-hidden="true">↗</span></a>
+    <span>ORIGINAL BROWSER GAME</span>
+    <span>V1.0</span>
+  </footer>
+  <noscript><p class="noscript">Tanks needs JavaScript to calculate shots and update the battlefield.</p></noscript>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,161 @@
+:root {
+  color-scheme: dark;
+  --bg: #10191e;
+  --panel: #18272e;
+  --ink: #f2eee3;
+  --muted: #a9b9bb;
+  --line: #32454b;
+  --mint: #9be5cf;
+  --gold: #ffb67b;
+  --mono: "Courier New", monospace;
+  font-family: system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  color: var(--ink);
+  background: radial-gradient(ellipse at 32% 0%, #243338 0%, transparent 55%), var(--bg);
+  min-height: 100vh;
+}
+button, select, input { font: inherit; }
+button { cursor: pointer; }
+button:disabled, input:disabled, select:disabled { opacity: .52; cursor: not-allowed; }
+:focus-visible { outline: 2px solid var(--mint); outline-offset: 4px; }
+.masthead {
+  max-width: 1520px;
+  margin: auto;
+  padding: 24px clamp(16px, 4vw, 64px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.wordmark { display: flex; gap: 10px; align-items: center; text-decoration: none; color: var(--ink); }
+.wordmark > span { font-weight: 900; font-size: 16px; letter-spacing: .14em; }
+.wordmark small { display: block; font: 9px var(--mono); color: var(--muted); letter-spacing: .08em; margin-top: 3px; }
+.mast-actions { display: flex; align-items: center; gap: 8px; }
+.top-badge, .eyebrow, .field-bar, .field-caption, .label, footer { font: 11px var(--mono); letter-spacing: .1em; }
+.top-badge { color: var(--muted); margin-right: 8px; }
+.top-badge i, .field-bar i, .eyebrow > span {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--mint); margin-right: 7px; vertical-align: 1px;
+}
+.layout {
+  max-width: 1520px;
+  margin: auto;
+  padding: 22px clamp(16px, 4vw, 64px) 32px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  align-items: start;
+  gap: clamp(16px, 3vw, 40px);
+}
+.eyebrow { color: var(--mint); margin: 0 0 10px; }
+.intro { margin-bottom: 24px; }
+h1 { font-size: clamp(64px, 10vw, 128px); line-height: .88; margin: 0; font-weight: 950; font-style: italic; letter-spacing: -.09em; }
+h1 span { color: var(--gold); }
+.tagline { font-size: clamp(20px, 3vw, 30px); font-weight: 760; letter-spacing: -.035em; margin: 12px 0 6px; }
+.lede { margin: 0; color: var(--muted); line-height: 1.5; max-width: 610px; font-size: 14px; }
+.viewport {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  overflow: hidden;
+  background: #141f25;
+  box-shadow: 0 20px 60px #040a0c5c;
+}
+.field-bar, .field-caption { padding: 10px 13px; display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.field-bar { background: #1b2b32; color: var(--ink); }
+.field-caption { color: var(--muted); font-size: 9px; }
+#wind-label { color: var(--gold); white-space: nowrap; }
+#turn-label, #seed-label { white-space: nowrap; }
+canvas { width: 100%; height: auto; display: block; aspect-ratio: 2; }
+canvas.aiming { touch-action: none; cursor: crosshair; }
+.panel {
+  background: linear-gradient(154deg, #23363d 0%, var(--panel) 48%);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 20px;
+  box-shadow: 0 18px 45px #080e1160;
+  position: relative;
+}
+.panel::before { content: ""; position: absolute; inset: 0 22px auto; height: 1px; background: linear-gradient(90deg, var(--mint), transparent 70%); }
+h2 { font-size: 23px; letter-spacing: -.045em; line-height: 1.1; margin: 0 0 16px; }
+.label { display: block; color: var(--muted); margin: 16px 0 7px; }
+.map-options { display: grid; gap: 7px; }
+.map-option, .weapon, .secondary, .quiet, select, #share-url {
+  color: var(--ink);
+  background: #142229;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.map-option {
+  display: flex; align-items: center; gap: 10px; text-align: left; padding: 9px 11px; min-height: 52px;
+}
+.map-option[aria-pressed="true"], .weapon[aria-pressed="true"] { border-color: var(--mint); background: #243e3e; }
+.map-option:hover, .weapon:hover, .secondary:hover, .quiet:hover { border-color: #77959a; }
+.map-tile {
+  flex: 0 0 46px; height: 29px; border-radius: 4px; overflow: hidden;
+  background: linear-gradient(#536d75,#9d8681);
+}
+.map-tile::after { content: ""; display: block; height: 100%; background: #302c31; clip-path: polygon(0 62%,22% 42%,45% 76%,68% 25%,100% 65%,100% 100%,0 100%); }
+.map-tile.ridge::after { clip-path: polygon(0 75%,25% 67%,48% 14%,54% 23%,75% 60%,100% 70%,100% 100%,0 100%); }
+.map-tile.basin::after { clip-path: polygon(0 44%,22% 48%,36% 80%,65% 82%,79% 45%,100% 42%,100% 100%,0 100%); }
+.map-option b, .weapon b { display: block; font-size: 13px; }
+.map-option small, .weapon small { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+select, #share-url { width: 100%; padding: 9px; min-height: 42px; }
+.helper { font-size: 12px; color: var(--muted); line-height: 1.5; margin: 8px 0 13px; }
+.primary, .secondary { min-height: 44px; padding: 9px 12px; width: 100%; font-weight: 750; }
+.primary { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #172421; background: var(--mint); border: 1px solid transparent; border-radius: 6px; }
+.primary:hover:not(:disabled) { background: #b6f3df; }
+.secondary { margin-top: 8px; }
+.quiet { min-height: 38px; padding: 7px 11px; font-size: 12px; }
+.status { min-height: 21px; margin: 12px 0; font-size: 13px; color: var(--muted); }
+.manual { border-top: 1px solid var(--line); padding: 11px 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.manual summary { color: var(--ink); cursor: pointer; width: fit-content; }
+.manual p { margin: 8px 0; }
+.players { display: grid; grid-template-columns: repeat(auto-fit,minmax(112px,1fr)); gap: 8px; margin-bottom: 12px; }
+.player {
+  padding: 9px 10px; border-radius: 6px; border: 1px solid var(--line);
+  background: #15242a; min-width: 0;
+}
+.player.active { border-color: var(--team); }
+.player.out { opacity: .55; }
+.player-heading { display: flex; justify-content: space-between; align-items: center; gap: 5px; font-size: 12px; }
+.player-heading b { color: var(--team); }
+.player-heading small { color: var(--muted); font: 9px var(--mono); }
+.player progress { width: 100%; height: 5px; display: block; margin-top: 7px; accent-color: var(--team); }
+.range-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 6px; margin: 9px 0; }
+.range-row label, .range-row output { font: 11px var(--mono); letter-spacing: .05em; }
+.range-row label { color: var(--muted); }
+.range-row output { color: var(--mint); }
+.range-row input { grid-column: 1 / -1; width: 100%; margin: 0; height: 28px; accent-color: var(--mint); }
+.weapons { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; }
+.weapon { padding: 7px 8px; text-align: left; min-height: 45px; }
+.weapon b { font-size: 12px; }
+.weapon small { font: 10px var(--mono); }
+.notice, .import-card { border: 1px solid #846d4d; background: #332b24; border-radius: 6px; padding: 10px; font-size: 13px; line-height: 1.45; }
+.import-card { margin-top: 10px; }
+.import-card p { margin: 0; }
+.handoff p, .result p { margin: 0 0 16px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+#share-url { font: 11px var(--mono); }
+footer {
+  max-width: 1392px; margin: 0 auto; padding: 16px clamp(16px, 4vw, 48px) 24px;
+  border-top: 1px solid var(--line); display: flex; gap: 16px; justify-content: space-between;
+  color: var(--muted); font-size: 9px;
+}
+footer a { color: var(--mint); text-underline-offset: 3px; }
+.noscript { padding: 16px; }
+@media (max-width: 860px) {
+  .layout { grid-template-columns: minmax(0,1fr); gap: 16px; }
+  .masthead { padding-block: 15px; }
+  .intro { margin-bottom: 16px; }
+  .layout { padding-top: 12px; }
+}
+@media (max-width: 490px) {
+  .top-badge { display: none; }
+  .panel { padding: 15px; }
+  .field-bar, .field-caption { padding-inline: 8px; font-size: 8px; letter-spacing: .04em; }
+  .players { gap: 5px; }
+  .player { padding: 7px; }
+  .layout { padding-inline: 12px; }
+}
+.import-card { margin: 0 0 12px; }

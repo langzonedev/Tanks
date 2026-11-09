@@ -1,0 +1,12 @@
+{
+  "name": "langsystems-tanks",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check engine.js && node --check renderer.js && node --check session.js && node --check app.js",
+    "test": "node --test tests/*.test.mjs",
+    "verify": "npm run check && npm test",
+    "start": "python3 -m http.server 4174"
+  }
+}
