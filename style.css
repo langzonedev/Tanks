@@ -167,3 +167,43 @@ footer a { color: var(--mint); text-underline-offset: 3px; }
 .order-note { margin: 5px 0 10px; color: var(--gold); font-size: 12px; line-height: 1.4; }
 #bot-status { border-left: 2px solid var(--gold); padding: 9px 11px; background: #142229; }
 #unit-picker > .label { margin-top: 0; }
+
+/* Keep the active field in view while the command panel scrolls. */
+@media (max-width: 860px), (max-width: 1024px) and (max-height: 540px) {
+  .in-match .field-board {
+    background: var(--bg);
+    min-width: 0;
+  }
+  .in-match .players { margin-bottom: 7px; }
+  .in-match .field-bar, .in-match .field-caption { padding-block: 6px; }
+  .in-match .objective-status, .in-match .status { margin: 5px 0 0; }
+}
+@media (max-width: 699px) and (min-height: 500px) and (orientation: portrait) {
+  html:has(.in-match) { scroll-padding-top: calc(var(--battlefield-height, 0px) + 8px); }
+  .in-match { gap: 10px; }
+  .in-match .field-column { display: contents; }
+  .in-match .field-board {
+    position: sticky;
+    z-index: 2;
+    top: 0;
+    padding: 7px 0;
+  }
+  .in-match #command { grid-row: 2; }
+  .in-match canvas { width: min(100%, 76dvh); margin-inline: auto; }
+}
+@media (min-width: 700px) and (max-width: 860px), (min-width: 540px) and (max-width: 1024px) and (max-height: 540px) {
+  .in-match {
+    grid-template-columns: minmax(0, 1fr) minmax(230px, 34%);
+    gap: 12px;
+  }
+  .in-match #command { padding: 12px; }
+}
+@media (min-width: 540px) and (max-width: 1024px) and (max-height: 540px) {
+  .in-match { padding-inline: 12px; }
+  .in-match .field-column { display: contents; }
+  .in-match .field-board { position: sticky; top: 0; padding-block: 5px; }
+  .in-match #command { grid-column: 2; grid-row: 1 / span 2; }
+  .in-match canvas { width: min(100%, max(160px, calc(200dvh - 270px))); margin-inline: auto; }
+  .in-match .field-bar, .in-match .field-caption { padding-inline: 6px; font-size: 8px; }
+  .in-match .players { grid-template-columns: repeat(auto-fit, minmax(95px, 1fr)); }
+}

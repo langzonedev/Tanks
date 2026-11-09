@@ -82,11 +82,53 @@ async function run() {
     await first.getByText('This turn link is invalid or incomplete.', {exact: false}).waitFor();
     await first.getByRole('heading', {name: 'Tide’s turn'}).waitFor();
 
-    const mobile = await newPage({viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true});
-    await mobile.getByRole('button', {name: 'Start match'}).tap();
-    await mobile.getByRole('button', {name: 'Finish deployment'}).tap();
-    await mobile.getByRole('heading', {name: 'Ember’s turn'}).waitFor();
-    assert.equal(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    for (const [width, height, touch] of [
+      [320, 568, true], [390, 844, true], [667, 375, true],
+      [844, 390, true], [768, 1024, true], [1024, 768, false]
+    ]) {
+      const animate = width === 844;
+      const page = await newPage({
+        viewport: {width, height},
+        isMobile: touch,
+        hasTouch: touch,
+        deviceScaleFactor: touch ? 2 : 1,
+        reducedMotion: animate ? 'no-preference' : 'reduce'
+      });
+      const press = name => {
+        const button = page.getByRole('button', {name});
+        return touch ? button.tap() : button.click();
+      };
+      const canvas = page.locator('#field');
+      const boardInView = async () => {
+        const box = await canvas.boundingBox();
+        assert.ok(box.y >= -1 && box.y + box.height <= height + 1,
+          `Battlefield should stay visible at ${width}×${height}: ${JSON.stringify(box)}`);
+      };
+      try {
+        await press('Start match');
+        await boardInView();
+        assert.equal(await canvas.evaluate(node => getComputedStyle(node).touchAction), 'auto');
+        await press('Finish deployment');
+        await page.getByRole('heading', {name: 'Ember’s turn'}).waitFor();
+        await press('Finish deployment');
+        await press(/^Air Raid/);
+        await boardInView();
+        const position = {x: Math.round((await canvas.boundingBox()).width * .72), y: 45};
+        await (touch ? canvas.tap({position}) : canvas.click({position}));
+        const target = Number(await page.locator('#target').inputValue());
+        assert.ok(target > 830 && target < 890, `Canvas should target grid 864, got ${target}`);
+        await press('Call air raid');
+        if (animate) {
+          assert.equal(await page.getByRole('button', {name: 'Match setup'}).isDisabled(), true);
+          await boardInView();
+        }
+        await page.getByRole('heading', {name: 'Ember’s turn'}).waitFor();
+        assert.equal(await page.locator('#turn-label').textContent(), 'TURN 04');
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+      } finally {
+        await page.context().close();
+      }
+    }
 
     const frontline = await newPage({viewport: {width: 1366, height: 900}});
     await frontline.getByRole('button', {name: 'Start match'}).click();
@@ -124,7 +166,7 @@ async function run() {
     assert.equal(await solo.locator('#turn-label').textContent(), 'TURN 05');
 
     assert.deepEqual(errors, []);
-    console.log('Chromium verified Classic, Frontline, solo recovery, two-context exchange, same-tab import, desktop battlefield and narrow touch play.');
+    console.log('Chromium verified Classic, Frontline, solo recovery, two-context exchange, same-tab import, desktop and laptop, tablet portrait, and four phone viewports across both orientations.');
   } finally {
     await browser.close();
     server.close();

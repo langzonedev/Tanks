@@ -7,7 +7,10 @@ import BattlefieldRenderer from './renderer.js?v=2';
 import {decodeTurn, encodeTurn, makeConfig} from './session.js?v=2.0.1';
 
 const $ = id => document.getElementById(id);
+const layout = document.querySelector('.layout');
 const field = $('field');
+const fieldBoard = $('field-board');
+const compactLayout = matchMedia('(max-width: 860px), (max-height: 540px) and (max-width: 1024px)');
 const renderer = new BattlefieldRenderer(field);
 const motion = matchMedia('(prefers-reduced-motion: reduce)');
 const storageKey = 'langsystems-tanks-match-v1';
@@ -141,6 +144,7 @@ function clearLink() {
 
 function setSetup() {
   phase = 'setup';
+  layout.classList.remove('in-match');
   replacePending = false;
   $('intro').hidden = false;
   $('players').hidden = true;
@@ -325,7 +329,10 @@ function syncOrderControls() {
     ? 'Reposition one unit or hold. Attacks and air support unlock after both sides deploy.'
     : weapon.description;
   $('fire').firstChild.textContent = (deployment() ? 'Finish deployment' : actionLabels[weapon.id] || 'Fire') + ' ';
-  $('field-hint').textContent = deployment() ? 'DEPLOYMENT / POSITION ONE UNIT' : weapon.targeted ? 'TAP THE FIELD TO SET TARGET' : 'DRAG TO AIM / ONE ORDER PER TURN';
+  field.classList.toggle('aiming', !locked() && (aiming || weapon.targeted));
+  $('field-hint').textContent = deployment() ? 'DEPLOYMENT / POSITION ONE UNIT'
+    : weapon.targeted ? 'TAP THE FIELD TO SET TARGET'
+    : aiming ? 'DRAG TO AIM / ONE ORDER PER TURN' : 'ONE ORDER PER TURN';
 }
 
 function showObjective() {
@@ -344,6 +351,7 @@ function shareUrl() {
 
 function renderMatch() {
   phase = 'match';
+  layout.classList.add('in-match');
   const ended = match.winner !== null;
   const tank = match.players[match.active];
   const winner = typeof match.winner === 'number' ? match.players[match.winner] : null;
@@ -379,7 +387,7 @@ function renderMatch() {
       ? 'Send the final position to your opponent.'
       : `Send this link to ${tank.name} so they can take their turn.`;
   }
-  field.classList.toggle('aiming', !locked());
+  field.classList.remove('aiming');
   field.tabIndex = locked() ? -1 : 0;
   for (const id of ['angle', 'power', 'move', 'target', 'fire']) $(id).disabled = locked();
   playerCards();
@@ -429,6 +437,12 @@ function queueDraw() {
   });
 }
 
+function focusMatch(revealBoard = false) {
+  const action = match.winner !== null ? $('rematch') : waiting ? $('copy') : null;
+  if (revealBoard && compactLayout.matches) window.scrollTo({top: layout.offsetTop});
+  if (!botTurn()) (action || field).focus({preventScroll: !action});
+}
+
 function startMatch() {
   cancelBot();
   match = createBoard(seed());
@@ -439,7 +453,7 @@ function startMatch() {
   const saved = saveMatch();
   const instruction = deployment() ? 'Choose a unit and set its opening position.' : frontline() ? 'Choose a unit and issue its first order.' : 'Choose a weapon, line up your shot and fire.';
   announce(saved ? instruction : 'Match started. This browser could not save progress.');
-  field.focus({preventScroll: true});
+  focusMatch(true);
 }
 
 function tone(kind) {
@@ -481,7 +495,11 @@ function performOrder(command) {
   const shooter = before.players[before.active].name;
   recording = true;
   renderMatch();
-  if (matchMedia('(max-width: 860px)').matches) field.scrollIntoView({block: 'center'});
+  const bounds = field.getBoundingClientRect();
+  if (!motion.matches && result.duration && compactLayout.matches &&
+      (bounds.top < 0 || bounds.bottom > innerHeight)) {
+    field.scrollIntoView({block: 'center'});
+  }
   announce(shooter + (frontline() ? ' issues an order.' : ' fires.'));
   tone('fire');
   const finish = () => {
@@ -491,8 +509,7 @@ function performOrder(command) {
     prepareTurn();
     renderMatch();
     announce(`${result.summary}${saved ? '' : ' Progress could not be saved on this device.'}`);
-    const focus = match.winner !== null ? $('rematch') : waiting ? $('copy') : field;
-    if (!botTurn()) focus.focus({preventScroll: true});
+    focusMatch();
     readIncomingTurn();
   };
   if (motion.matches || !result.duration) {
@@ -633,6 +650,7 @@ $('resume').addEventListener('click', () => {
   prepareTurn();
   renderMatch();
   announce('Saved match resumed.');
+  focusMatch(true);
 });
 $('import-button').addEventListener('click', () => {
   if (!incoming) return;
@@ -650,7 +668,7 @@ $('import-button').addEventListener('click', () => {
   renderMatch();
   const saved = saveMatch();
   announce(saved ? 'Shared match opened.' : 'Shared match opened. Progress could not be saved.');
-  (match.winner === null ? field : $('rematch')).focus({preventScroll: true});
+  focusMatch(true);
 });
 let savedSettings;
 function openMenu() {
@@ -670,7 +688,7 @@ $('continue').addEventListener('click', () => {
   saveMatch();
   renderMatch();
   announce(`${match.players[match.active].name} takes the next turn on this device.`);
-  field.focus({preventScroll: true});
+  focusMatch(true);
 });
 $('copy').addEventListener('click', async () => {
   try {
@@ -747,6 +765,9 @@ function resizeField() {
 }
 motion.addEventListener('change', resizeField);
 window.addEventListener('resize', resizeField);
+new ResizeObserver(() => {
+  document.documentElement.style.setProperty('--battlefield-height', fieldBoard.offsetHeight + 'px');
+}).observe(fieldBoard);
 window.addEventListener('hashchange', readIncomingTurn);
 
 readSavedMatch();
