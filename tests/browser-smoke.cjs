@@ -10,7 +10,7 @@ const types = new Map([
   ['index.html', 'text/html'],
   ['style.css', 'text/css'],
   ['icon.svg', 'image/svg+xml'],
-  ...['app.js', 'engine.js', 'renderer.js', 'session.js'].map(name => [name, 'text/javascript'])
+  ...['app.js', 'engine.js', 'frontline.js', 'bot.js', 'renderer.js', 'session.js'].map(name => [name, 'text/javascript'])
 ]);
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
@@ -42,6 +42,7 @@ async function run() {
   }
   try {
     const local = await newPage();
+    await local.locator('#scenario').selectOption('classic');
     await local.locator('#count').selectOption('4');
     await local.getByRole('button', {name: 'Start match'}).click();
     assert.equal(await local.locator('.player').count(), 4);
@@ -87,8 +88,35 @@ async function run() {
     await mobile.getByRole('heading', {name: 'Ember’s turn'}).waitFor();
     assert.equal(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 
+    const frontline = await newPage({viewport: {width: 1366, height: 900}});
+    await frontline.getByRole('button', {name: 'Start match'}).click();
+    assert.equal(await frontline.locator('#units button').count(), 3);
+    const battlefield = await frontline.locator('#field').boundingBox();
+    assert.ok(battlefield.width >= 820 && battlefield.height >= 410);
+    await frontline.getByRole('button', {name: /^Air Raid/}).click();
+    await frontline.getByRole('button', {name: 'Call air raid'}).click();
+    await frontline.getByRole('heading', {name: 'Ember’s turn'}).waitFor();
+    assert.equal(await frontline.locator('#turn-label').textContent(), 'TURN 02');
+    assert.equal(await frontline.getByRole('button', {name: 'Fire'}).isEnabled(), true);
+    assert.equal(await frontline.locator('#bot-status').isVisible(), false);
+
+    const solo = await newPage();
+    await solo.locator('#mode').selectOption('solo');
+    await solo.locator('#difficulty').selectOption('recruit');
+    await solo.getByRole('button', {name: 'Start match'}).click();
+    await solo.getByRole('button', {name: 'Fire'}).click();
+    await solo.getByRole('heading', {name: 'Ember AI'}).waitFor();
+    assert.equal(await solo.locator('#controls').isVisible(), false);
+    await solo.reload();
+    await solo.getByRole('button', {name: 'Resume saved match'}).click();
+    await solo.getByRole('heading', {name: 'Tide’s turn'}).waitFor({timeout: 12000});
+    assert.equal(await solo.locator('#turn-label').textContent(), 'TURN 03');
+    await solo.reload();
+    await solo.getByRole('button', {name: 'Resume saved match'}).click();
+    assert.equal(await solo.locator('#turn-label').textContent(), 'TURN 03');
+
     assert.deepEqual(errors, []);
-    console.log('Chromium verified local turns, saved recovery, two-context exchange, same-tab link import and narrow touch play.');
+    console.log('Chromium verified Classic, Frontline, solo recovery, two-context exchange, same-tab import, desktop battlefield and narrow touch play.');
   } finally {
     await browser.close();
     server.close();

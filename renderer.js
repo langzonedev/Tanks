@@ -358,7 +358,7 @@ function drawTank(ctx, tank, angle, terrain, active, ghost = false, tagScale = 1
     ctx.lineTo(-31, -9);
     ctx.fill();
   }
-  if (!ghost && tank.health > 0) drawTankTag(ctx, tank, color, active, tagScale);
+  if (!ghost && tank.health > 0 && tagScale) drawTankTag(ctx, tank, color, active, tagScale);
   ctx.restore();
 }
 
@@ -378,6 +378,254 @@ function drawTankTag(ctx, tank, color, active, scale) {
   ctx.fillRect(-15, 2, 30, 2.5);
   ctx.fillStyle = color;
   ctx.fillRect(-15, 2, 30 * Math.max(0, Math.min(tank.health, 100)) / 100, 2.5);
+}
+
+const UNIT_LABELS = { tank: 'TNK', rifle: 'RFL', rocket: 'AT' };
+const UNIT_HEALTH = { tank: 100, rifle: 65, rocket: 75 };
+const OBJECTIVE_COLOR = '#fae5a8';
+
+function factionMark(ctx, team, x, y, size, color) {
+  const points = team === 0
+    ? [[x, y - size], [x + size, y], [x, y + size], [x - size, y]]
+    : [[x, y - size], [x + size, y + size], [x - size, y + size]];
+  polygon(ctx, points, color);
+}
+
+function drawObjective(ctx, state, scale) {
+  const { x, radius, owner, contested } = state.objective;
+  const color = contested ? '#ffc185' : state.players[owner]?.color || OBJECTIVE_COLOR;
+  const ground = sampleGround(state.terrain, x);
+  const left = Math.max(0, Math.round(x - radius));
+  const right = Math.min(WIDTH, Math.round(x + radius));
+  ctx.save();
+
+  // Follow the actual terrain, so the control area stays legible after a crater.
+  ctx.fillStyle = color + '20';
+  ctx.beginPath();
+  ctx.moveTo(left, state.terrain[left] - 4);
+  for (let i = left + 1; i <= right; i++) ctx.lineTo(i, state.terrain[i] - 4);
+  for (let i = right; i >= left; i--) ctx.lineTo(i, state.terrain[i] + 23);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = color + 'c9';
+  ctx.lineWidth = 2.2;
+  ctx.setLineDash([5, 5]);
+  ctx.beginPath();
+  ctx.moveTo(left, state.terrain[left] - 4);
+  for (let i = left + 1; i <= right; i++) ctx.lineTo(i, state.terrain[i] - 4);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  for (const edge of [left, right]) {
+    const y = state.terrain[edge];
+    ctx.fillStyle = color;
+    ctx.fillRect(edge - 1.6, y - 14, 3.2, 18);
+    ctx.fillRect(edge - 5, y - 14, 10, 2.5);
+  }
+
+  ctx.translate(x, ground);
+  ctx.strokeStyle = color + 'bd';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, -2);
+  ctx.lineTo(0, -50);
+  ctx.stroke();
+  polygon(ctx, [[0, -49], [25, -46], [20, -35], [0, -38]], color);
+  if (owner != null && !contested) factionMark(ctx, owner, 10, -42, 3.5, INK);
+
+  // Below the surface keeps the text clear of aim paths and clustered squads.
+  const badgeY = Math.min(31, HEIGHT - ground - 26 * scale);
+  ctx.translate(0, badgeY);
+  ctx.scale(scale, scale);
+  const status = contested ? 'CONTESTED' : owner == null ? 'OPEN' : 'CONTROLLED';
+  const label = 'POST / ' + status;
+  const controlled = owner != null && !contested;
+  ctx.font = 'bold 10px system-ui, sans-serif';
+  const textWidth = ctx.measureText(label).width;
+  const halfWidth = Math.max(55, textWidth / 2 + (controlled ? 14 : 8));
+  roundRect(ctx, -halfWidth, 0, 2 * halfWidth, 19, 4, '#152030ee');
+  ctx.fillStyle = color;
+  ctx.fillRect(1 - halfWidth, 1, 2 * halfWidth - 2, 1);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  if (controlled) factionMark(ctx, owner, -textWidth / 2 - 5, 10.5, 3, color);
+  ctx.fillText(label, controlled ? 5 : 0, 10.5);
+  ctx.restore();
+}
+
+function drawInfantry(ctx, unit, angle, terrain, ghost) {
+  const rocket = unit.type === 'rocket';
+  const color = unit.color || PLAYER_COLORS[unit.team];
+  const direction = angle > 90 ? -1 : 1;
+  const soldiers = rocket ? [-9, 4] : [-11, 0, 11];
+  ctx.save();
+  ctx.translate(unit.x, unit.y);
+  ctx.globalAlpha = ghost ? 0.25 : 1;
+  for (const offset of soldiers) {
+    const groundOffset = sampleGround(terrain, unit.x + offset) - unit.y;
+    const height = rocket ? 16 : 21;
+    ctx.save();
+    ctx.translate(offset, Math.max(-6, Math.min(6, groundOffset)));
+    ctx.scale(direction, 1);
+    ctx.fillStyle = '#0c162ab0';
+    ctx.beginPath();
+    ctx.ellipse(0, 1.5, 7, 2.8, 0, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = '#172636';
+    ctx.lineWidth = 3.8;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-2, -height + 11);
+    ctx.lineTo(-4, -1);
+    ctx.moveTo(1, -height + 11);
+    ctx.lineTo(4, -1);
+    ctx.stroke();
+    polygon(ctx, [[-5, -height + 4], [2, -height + 3], [5, -height + 12], [-4, -height + 13]], color);
+    roundRect(ctx, -7, -height + 5, 4, 8, 1.3, '#243647');
+    disk(ctx, 0, -height + 1, 3.8, '#c7aa94');
+    polygon(ctx, [[-4, -height + 1], [-3, -height - 4], [2, -height - 4], [5, -height + 1]], color);
+    if (!rocket && offset !== 0) {
+      roundRect(ctx, 2, -14, 10, 3.6, 1.1, INK);
+      ctx.fillStyle = '#e2e6dd';
+      ctx.fillRect(5, -14, 7, 0.9);
+    }
+    ctx.restore();
+  }
+  // Match the projectile's starting point to the selected squad's weapon.
+  ctx.translate(0, rocket ? -14 : -12);
+  ctx.rotate(-angle * Math.PI / 180);
+  if (rocket) {
+    roundRect(ctx, -6, -3.2, 25, 6.4, 2, INK);
+    roundRect(ctx, -5, -2.2, 20, 3.5, 1.2, color);
+    roundRect(ctx, 14, -4, 5, 8, 1.3, '#475867');
+  } else {
+    roundRect(ctx, -2, -2.1, 17, 4.2, 1.2, INK);
+    ctx.fillStyle = '#e2e6dd';
+    ctx.fillRect(5, -1.6, 9, 1);
+  }
+  ctx.restore();
+}
+
+function placeUnitBadges(units, activeUnit, scale) {
+  const occupied = [];
+  const living = units.filter(({ health }) => health > 0);
+  living.sort((a, b) => Number(b.id === activeUnit?.id) - Number(a.id === activeUnit?.id) || a.x - b.x);
+  for (const unit of living) {
+    const selected = unit.id === activeUnit?.id;
+    const x = Math.max(21 * scale, Math.min(WIDTH - 21 * scale, unit.x));
+    const baseY = unit.y - (selected ? 49 : 35);
+    let y = baseY;
+    while (occupied.some((badge) => Math.abs(badge.x - x) < 41 * scale && Math.abs(badge.y - y) < 23 * scale)) {
+      y -= 23 * scale;
+    }
+    occupied.push({ unit, selected, x, y, moved: x !== unit.x || y !== baseY });
+  }
+  return occupied;
+}
+
+function drawBadgeLeader(ctx, { unit, x, y, moved }, scale) {
+  if (!moved) return;
+  const color = unit.color || PLAYER_COLORS[unit.team];
+  ctx.strokeStyle = color + '8c';
+  ctx.lineWidth = 1.2 * scale;
+  ctx.beginPath();
+  ctx.moveTo(unit.x, unit.y - 28);
+  ctx.lineTo(x, y + 5 * scale);
+  ctx.stroke();
+}
+
+function drawUnitBadge(ctx, { unit, selected, x, y }, scale) {
+  const color = unit.color || PLAYER_COLORS[unit.team];
+  ctx.save();
+  if (selected) {
+    ctx.save();
+    ctx.translate(unit.x, unit.y);
+    ctx.strokeStyle = '#f5fbf1';
+    ctx.lineWidth = 2 * scale;
+    const size = unit.type === 'tank' ? 29 : 25;
+    ctx.beginPath();
+    ctx.moveTo(-size, -10);
+    ctx.lineTo(-size, 5);
+    ctx.lineTo(-size + 8, 5);
+    ctx.moveTo(size, -10);
+    ctx.lineTo(size, 5);
+    ctx.lineTo(size - 8, 5);
+    ctx.stroke();
+    polygon(ctx, [[-4 * scale, -44], [4 * scale, -44], [0, -36]], '#f5fbf1');
+    ctx.restore();
+  }
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+  roundRect(ctx, -19, -16, 38, 16, 4, selected ? '#e2eee9' : '#101b2cf4');
+  factionMark(ctx, unit.team, -11.5, -8, 3.5, selected ? INK : color);
+  ctx.font = 'bold 10px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = selected ? INK : color;
+  ctx.fillText(UNIT_LABELS[unit.type] || '', 5, -8);
+  ctx.fillStyle = '#18222e';
+  ctx.fillRect(-18, 2, 36, 2.5);
+  ctx.fillStyle = color;
+  const maxHealth = unit.maxHealth ?? UNIT_HEALTH[unit.type] ?? 100;
+  ctx.fillRect(-18, 2, 36 * Math.max(0, Math.min(unit.health / maxHealth, 1)), 2.5);
+  ctx.restore();
+}
+
+function drawFrontlineUnit(ctx, unit, angle, terrain, ghost) {
+  if (unit.type === 'tank') drawTank(ctx, unit, angle, terrain, false, ghost, 0);
+  else if (unit.health > 0) drawInfantry(ctx, unit, angle, terrain, ghost);
+}
+
+function drawFrontline(ctx, state, { angle, selectedUnit, previewTank, elapsed, tagScale }) {
+  const units = state.units;
+  const activeUnit = units.find((unit) => unit.id === selectedUnit && unit.health > 0 && unit.team === state.active);
+  const onField = [];
+  for (const unit of units) {
+    const isActive = unit === activeUnit;
+    const moved = isActive && previewTank ? { ...unit, ...previewTank } : unit;
+    const opponents = units.filter((other) => other.team !== unit.team);
+    const aim = isActive && Number.isFinite(angle) ? angle : tankAngle(moved, opponents);
+    if (Math.abs(moved.x - unit.x) > 1) drawFrontlineUnit(ctx, unit, aim, state.terrain, true);
+    drawFrontlineUnit(ctx, moved, aim, state.terrain, false);
+    onField.push(moved);
+  }
+  const badges = placeUnitBadges(onField, Number.isFinite(elapsed) ? null : activeUnit, tagScale);
+  for (const badge of badges) drawBadgeLeader(ctx, badge, tagScale);
+  for (const badge of badges) drawUnitBadge(ctx, badge, tagScale);
+}
+
+function drawActionTarget(ctx, x, terrain, action, scale) {
+  if (!Number.isFinite(x) || (action !== 'air-raid' && action !== 'air-drop')) return;
+  const y = sampleGround(terrain, x);
+  const color = action === 'air-drop' ? '#8af0d0' : '#ffb38b';
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.2 * scale;
+  ctx.setLineDash([4, 5]);
+  ctx.beginPath();
+  ctx.moveTo(0, -93 * scale);
+  ctx.lineTo(0, -14 * scale);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.scale(scale, scale);
+  ctx.beginPath();
+  ctx.arc(0, -1, 10, 0, TAU);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-15, -1);
+  ctx.lineTo(-6, -1);
+  ctx.moveTo(15, -1);
+  ctx.lineTo(6, -1);
+  ctx.stroke();
+  const label = action === 'air-drop' ? 'DROP ZONE' : 'RAID TARGET';
+  const labelX = Math.max(39 - x / scale, Math.min(0, (WIDTH - x) / scale - 39));
+  roundRect(ctx, labelX - 39, -113, 78, 18, 4, '#101b2cf4');
+  ctx.fillStyle = color;
+  ctx.font = 'bold 9px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, labelX, -104);
+  ctx.restore();
 }
 
 function drawAimPreview(ctx, paths, impacts, color, lineScale) {
@@ -425,10 +673,64 @@ function shellAt(path, elapsed) {
   return {x: previous.x + (next.x - previous.x) * progress, y: previous.y + (next.y - previous.y) * progress};
 }
 
-function drawShells(ctx, paths, elapsed, color) {
+function drawCargo(ctx, x, y, parachute = false) {
+  ctx.save();
+  ctx.translate(x, y);
+  if (parachute) {
+    ctx.strokeStyle = '#c4f4e5b5';
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(-17, -22);
+    ctx.lineTo(-6, -5);
+    ctx.moveTo(17, -22);
+    ctx.lineTo(6, -5);
+    ctx.moveTo(0, -25);
+    ctx.lineTo(0, -5);
+    ctx.stroke();
+    ctx.fillStyle = '#92e1c9';
+    ctx.beginPath();
+    ctx.moveTo(-17, -22);
+    ctx.quadraticCurveTo(-12, -42, 0, -39);
+    ctx.quadraticCurveTo(12, -42, 17, -22);
+    ctx.quadraticCurveTo(8, -27, 0, -22);
+    ctx.quadraticCurveTo(-8, -27, -17, -22);
+    ctx.fill();
+    ctx.fillStyle = '#dfefe4';
+    ctx.beginPath();
+    ctx.moveTo(-6, -23);
+    ctx.quadraticCurveTo(-5, -36, 0, -39);
+    ctx.quadraticCurveTo(5, -36, 6, -23);
+    ctx.lineTo(0, -22);
+    ctx.closePath();
+    ctx.fill();
+  }
+  roundRect(ctx, -9, -7, 18, 13, 2, '#152638');
+  roundRect(ctx, -7.5, -5.5, 15, 10, 1, '#8ed0b8');
+  ctx.fillStyle = '#304f50';
+  ctx.fillRect(-5, -5.5, 2, 10);
+  ctx.fillRect(3, -5.5, 2, 10);
+  ctx.restore();
+}
+
+function drawBomb(ctx, x, y) {
+  ctx.save();
+  ctx.translate(x, y);
+  polygon(ctx, [[-7, -13], [-3, -10], [3, -10], [7, -13], [5, -4], [-5, -4]], '#c86f58');
+  roundRect(ctx, -4.8, -11, 9.6, 20, 4, '#263340');
+  roundRect(ctx, -3, -5, 6, 13, 3, '#ffab77');
+  ctx.fillStyle = '#ffe0b4';
+  ctx.fillRect(-3, 0, 6, 2);
+  ctx.restore();
+}
+
+function drawShells(ctx, paths, elapsed, color, action) {
   for (const path of paths) {
     const shell = shellAt(path, elapsed);
     if (!shell) continue;
+    if (action === 'air-drop') {
+      drawCargo(ctx, shell.x, shell.y, true);
+      continue;
+    }
     ctx.save();
     ctx.lineCap = 'round';
     ctx.strokeStyle = color;
@@ -443,8 +745,11 @@ function drawShells(ctx, paths, elapsed, color) {
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
-    disk(ctx, shell.x, shell.y, 7, color + '49');
-    disk(ctx, shell.x, shell.y, 3.5, '#fff4cf');
+    if (action === 'air-raid') drawBomb(ctx, shell.x, shell.y);
+    else {
+      disk(ctx, shell.x, shell.y, 7, color + '49');
+      disk(ctx, shell.x, shell.y, 3.5, '#fff4cf');
+    }
     ctx.restore();
   }
 }
@@ -456,6 +761,30 @@ function drawImpacts(ctx, impacts, elapsed, reducedMotion) {
     const life = 1 - age / 0.72;
     const radius = Math.max(12, impact.radius || 18);
     ctx.save();
+
+    if (impact.weapon === 'air-drop') {
+      ctx.globalAlpha = 0.45 + life * 0.55;
+      drawCargo(ctx, impact.x, impact.y - 6);
+      if (!reducedMotion) {
+        ctx.globalAlpha = life * 0.32;
+        for (const offset of [-13, -7, 8, 15]) {
+          disk(ctx, impact.x + offset * (0.75 + age * 3), impact.y - age * 14, 3 + age * 16, '#d1b59c');
+        }
+      }
+      ctx.restore();
+      continue;
+    }
+
+    if (impact.weapon === 'rifle') {
+      ctx.globalAlpha = life * 0.85;
+      polygon(ctx, [
+        [impact.x, impact.y - 8], [impact.x + 2, impact.y - 2], [impact.x + 8, impact.y],
+        [impact.x + 2, impact.y + 2], [impact.x, impact.y + 8], [impact.x - 2, impact.y + 2],
+        [impact.x - 8, impact.y], [impact.x - 2, impact.y - 2],
+      ], '#ffe8a4');
+      ctx.restore();
+      continue;
+    }
 
     ctx.strokeStyle = impact.weapon === 'shield' ? '#90eafa' : '#ffc587';
     ctx.globalAlpha = life * 0.78;
@@ -501,6 +830,9 @@ export class BattlefieldRenderer {
   draw(state, {
     angle,
     previewTank,
+    selectedUnit,
+    target,
+    action,
     paths = [],
     impacts = [],
     elapsed,
@@ -535,23 +867,32 @@ export class BattlefieldRenderer {
     ctx.drawImage(this.ground, 0, 0);
 
     const active = state.players[state.active];
-    const shotColor = color || active?.color || PLAYER_COLORS[active?.id || 0];
+    const supportColor = action === 'air-raid' ? '#ffb38b' : action === 'air-drop' ? '#8af0d0' : null;
+    const shotColor = color || supportColor || active?.color || PLAYER_COLORS[active?.id || 0];
     const tagScale = Math.max(1, Math.min(2.2, 850 / width));
-    if (!Number.isFinite(elapsed)) {
+    const playingBack = Number.isFinite(elapsed);
+    const frontline = state.scenario === 'frontline';
+    if (frontline) drawObjective(ctx, state, tagScale);
+    if (!playingBack) {
       drawAimPreview(ctx, paths, impacts, shotColor, Math.max(1, Math.min(2, 620 / width)));
     }
-    for (const tank of state.players) {
-      const isActive = tank.id === active?.id;
-      const visibleTank = isActive && previewTank ? previewTank : tank;
-      const aim = isActive && Number.isFinite(angle) ? angle : tankAngle(visibleTank, state.players);
-      if (visibleTank !== tank && Math.abs(visibleTank.x - tank.x) > 1) {
-        drawTank(ctx, tank, aim, state.terrain, false, true);
+    if (frontline) {
+      drawFrontline(ctx, state, { angle, selectedUnit, previewTank, elapsed, tagScale });
+      if (!playingBack) drawActionTarget(ctx, target, state.terrain, action, tagScale);
+    } else {
+      for (const tank of state.players) {
+        const isActive = tank.id === active?.id;
+        const visibleTank = isActive && previewTank ? previewTank : tank;
+        const aim = isActive && Number.isFinite(angle) ? angle : tankAngle(visibleTank, state.players);
+        if (visibleTank !== tank && Math.abs(visibleTank.x - tank.x) > 1) {
+          drawTank(ctx, tank, aim, state.terrain, false, true);
+        }
+        drawTank(ctx, visibleTank, aim, state.terrain, isActive && !playingBack, false, tagScale);
       }
-      drawTank(ctx, visibleTank, aim, state.terrain, isActive && !Number.isFinite(elapsed), false, tagScale);
     }
 
-    if (Number.isFinite(elapsed)) {
-      drawShells(ctx, paths, elapsed, shotColor);
+    if (playingBack) {
+      drawShells(ctx, paths, elapsed, shotColor, action);
       drawImpacts(ctx, impacts, elapsed, reducedMotion);
     }
   }

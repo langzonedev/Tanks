@@ -29,7 +29,7 @@ test('malformed, oversized, unversioned and forged match envelopes are rejected'
     assert.throws(() => decodeTurn(input));
   }
   for (const payload of [
-    [2, ...base.slice(1)], [1, -1, ...base.slice(2)], [1, '420', ...base.slice(2)],
+    [3, ...base.slice(1)], [1, -1, ...base.slice(2)], [1, '420', ...base.slice(2)],
     [1, 420, 'constructor', 2, []], [1, 420, 'ridge', 5, []], [...base, { winner: 0 }],
     [1, 420, 'ridge', 2, Array(MAX_TURNS + 1).fill([0, 0, 100, 0])],
   ]) assert.throws(() => decodeTurn(toToken(payload)));

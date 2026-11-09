@@ -159,3 +159,11 @@ footer a { color: var(--mint); text-underline-offset: 3px; }
   .layout { padding-inline: 12px; }
 }
 .import-card { margin: 0 0 12px; }
+
+.units { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.units .weapon { min-height: 47px; padding: 6px; }
+.units .weapon b { font-size: 11px; }
+.objective-status { margin: 10px 0 0; color: var(--gold); font: 11px var(--mono); line-height: 1.5; }
+.order-note { margin: 5px 0 10px; color: var(--gold); font-size: 12px; line-height: 1.4; }
+#bot-status { border-left: 2px solid var(--gold); padding: 9px 11px; background: #142229; }
+#unit-picker > .label { margin-top: 0; }

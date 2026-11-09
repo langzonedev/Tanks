@@ -1,8 +1,10 @@
 import {
   WIDTH, HEIGHT, MAPS, WEAPONS, createMatch, predictShot, previewTank, resolveTurn
 } from './engine.js';
-import BattlefieldRenderer from './renderer.js';
-import {decodeTurn, encodeTurn, makeConfig} from './session.js';
+import {createFrontline, frontlineWeapons, frontlineMoveLimit, previewFrontline, resolveFrontline} from './frontline.js';
+import {planBotTurn} from './bot.js';
+import BattlefieldRenderer from './renderer.js?v=2';
+import {decodeTurn, encodeTurn, makeConfig} from './session.js?v=2';
 
 const $ = id => document.getElementById(id);
 const field = $('field');
@@ -10,7 +12,7 @@ const renderer = new BattlefieldRenderer(field);
 const motion = matchMedia('(prefers-reduced-motion: reduce)');
 const storageKey = 'langsystems-tanks-match-v1';
 const seed = () => crypto.getRandomValues(new Uint32Array(1))[0];
-const options = {map: MAPS[0].id, count: 2, mode: 'local'};
+const options = {map: MAPS[0].id, count: 2, mode: 'local', scenario: 'frontline', difficulty: 'standard'};
 const surveySeed = seed();
 let match = null;
 let incoming = null;
@@ -19,18 +21,49 @@ let waiting = false;
 let recording = false;
 let replacePending = false;
 let weaponId = 'shell';
+let selectedUnit = null;
+let botTimer = null;
+let botWorker = null;
+let aimTank = null;
+const unitNames = {tank: 'Tank', rifle: 'Rifle squad', rocket: 'AT squad'};
+const actionLabels = {shield: 'Deploy shield', 'air-raid': 'Call air raid', 'air-drop': 'Drop reinforcements', hold: 'Hold position'};
+const frontline = () => match?.scenario === 'frontline';
+const botTurn = () => options.mode === 'solo' && match?.active === 1 && match.winner === null;
+const locked = () => waiting || recording || match.winner !== null || botTurn();
+
+function createBoard(gameSeed) {
+  const count = options.scenario === 'frontline' || options.mode !== 'local' ? 2 : options.count;
+  const config = makeConfig(options.map, count, gameSeed);
+  return options.scenario === 'frontline' ? createFrontline(config) : createMatch(config);
+}
+
+function friendlyUnits() {
+  return match.units.filter(unit => unit.team === match.active && unit.health > 0);
+}
+
+function orderOptions() {
+  if (frontline()) return selectedUnit === null ? [] : frontlineWeapons(match, selectedUnit);
+  const ammo = match.players[match.active].ammo;
+  return WEAPONS.map(weapon => ({...weapon, ammo: ammo[weapon.id]}));
+}
+
+function actionPreview(command) {
+  return frontline() ? previewFrontline(match, command) : predictShot(match, command);
+}
 let frameQueued = false;
 let pointerId = null;
 let audio = null;
 let sound = false;
 
 function getCommand() {
-  return {
+  const command = {
     move: Number($('move').value),
     angle: Number($('angle').value),
     power: Number($('power').value),
     weapon: weaponId
   };
+  if (frontline()) Object.assign(command, {unit: selectedUnit, target: Number($('target').value)});
+  return command;
 }
 
 function announce(message) {
@@ -41,6 +74,7 @@ function saveMatch(board = match, pending = waiting) {
   try {
     localStorage.setItem(storageKey, JSON.stringify({
       mode: options.mode,
+      difficulty: options.difficulty,
       waiting: pending,
       code: encodeTurn(board)
     }));
@@ -55,8 +89,10 @@ function readSavedMatch() {
     const raw = localStorage.getItem(storageKey);
     if (!raw || raw.length > 10200) return;
     const saved = JSON.parse(raw);
-    if (!['local', 'link'].includes(saved?.mode)) return;
+    if (!['local', 'link', 'solo'].includes(saved?.mode)) return;
     const restored = decodeTurn(saved.code);
+    if (saved.mode !== 'local' && restored.players.length !== 2) return;
+    options.difficulty = saved.difficulty === 'recruit' ? 'recruit' : 'standard';
     match = restored;
     options.mode = saved.mode;
     waiting = saved.mode === 'link' && saved.waiting === true && restored.winner === null;
@@ -107,6 +143,7 @@ function setSetup() {
   replacePending = false;
   $('intro').hidden = false;
   $('players').hidden = true;
+  $('objective-status').hidden = true;
   $('setup').hidden = false;
   $('command').hidden = true;
   $('menu-button').hidden = true;
@@ -117,22 +154,30 @@ function setSetup() {
   if (match) {
     options.map = match.map;
     options.count = match.players.length;
+    options.scenario = match.scenario || 'classic';
   }
   $('mode').value = options.mode;
+  $('scenario').value = options.scenario;
+  $('difficulty').value = options.difficulty;
   $('count').value = String(options.count);
   updateSetupPreview();
 }
 
 function updateSetupPreview() {
-  const count = options.mode === 'link' ? 2 : options.count;
-  const board = createMatch(makeConfig(options.map, count, surveySeed));
+  const board = createBoard(surveySeed);
   for (const button of $('map-options').children) {
     button.setAttribute('aria-pressed', String(button.dataset.map === options.map));
   }
-  $('count').disabled = options.mode === 'link';
-  $('mode-help').textContent = options.mode === 'link'
-    ? 'Two players. Send a fresh link after each shot to pass the turn.'
-    : 'Take turns on this screen with up to four players.';
+  const fixedCount = options.scenario === 'frontline' || options.mode !== 'local';
+  $('count').disabled = fixedCount;
+  $('count').value = fixedCount ? '2' : String(options.count);
+  $('difficulty-wrap').hidden = options.mode !== 'solo';
+  const modeCopy = {
+    solo: 'Take turns against Ember AI. Both sides get the same starting kit.',
+    link: 'Send a fresh link after each order to pass the turn.',
+    local: options.scenario === 'frontline' ? 'Two sides take turns on this device.' : 'Take turns on this screen with up to four players.'
+  };
+  $('mode-help').textContent = modeCopy[options.mode];
   $('map-label').textContent = MAPS.find(map => map.id === options.map).name.toUpperCase();
   $('wind-label').textContent = 'FIELD PREVIEW';
   $('turn-label').textContent = 'SECTOR 01';
@@ -142,12 +187,57 @@ function updateSetupPreview() {
 }
 
 function prepareTurn() {
-  const tank = match.players[match.active];
-  const opponent = match.players.find(player => player.id !== tank.id && player.health > 0);
-  $('angle').value = opponent && opponent.x < tank.x ? 138 : 42;
-  $('power').value = 68;
+  const tank = frontline() ? friendlyUnits()[0] : match.players[match.active];
+  selectedUnit = frontline() ? tank?.id ?? null : null;
   $('move').value = 0;
-  weaponId = 'shell';
+  $('power').value = 68;
+  aimTank = null;
+  if (!tank) return;
+  setUnitAim(tank);
+  weaponId = orderOptions().find(weapon => weapon.ammo !== 0)?.id || 'hold';
+}
+
+function setUnitAim(tank) {
+  const opponents = frontline()
+    ? match.units.filter(unit => unit.team !== match.active && unit.health > 0)
+    : match.players.filter(unit => unit.id !== tank.id && unit.health > 0);
+  const nearest = opponents.sort((a, b) => Math.abs(a.x - tank.x) - Math.abs(b.x - tank.x))[0];
+  $('angle').value = nearest && nearest.x < tank.x ? 138 : 42;
+  $('move').max = frontline() ? frontlineMoveLimit(tank) : 90;
+  $('move').min = -Number($('move').max);
+  $('move').value = 0;
+  $('target').value = nearest?.x ?? 600;
+}
+
+function selectUnit(unit) {
+  if (locked() || unit.id === selectedUnit) return;
+  selectedUnit = unit.id;
+  setUnitAim(unit);
+  weaponId = orderOptions().find(weapon => weapon.ammo !== 0)?.id || 'hold';
+  buildOrders();
+  drawMatch();
+  $('units').querySelector('[aria-pressed="true"]').focus({preventScroll: true});
+}
+
+function setSupportTarget(weapon) {
+  const actor = match.units.find(unit => unit.id === selectedUnit);
+  const enemies = match.units.filter(unit => unit.team !== match.active && unit.health > 0);
+  if (weapon === 'air-raid') {
+    const near = enemies.sort((a, b) => Math.abs(a.x - 600) - Math.abs(b.x - 600))[0];
+    $('target').value = near?.x ?? 600;
+    return;
+  }
+  const direction = match.active === 0 ? 1 : -1;
+  const command = getCommand();
+  for (const distance of [180, 125, 220, 70, 265, 35, 300, 340, 390]) {
+    const target = Math.round(match.objective.x - distance * direction);
+    const candidate = previewFrontline(match, {...command, target}, {record: false});
+    if (candidate.valid !== false) {
+      $('target').value = target;
+      return;
+    }
+  }
+  $('target').value = actor.x;
 }
 
 function playerCards() {
@@ -160,14 +250,14 @@ function playerCards() {
     const heading = document.createElement('div');
     heading.className = 'player-heading';
     const name = document.createElement('b');
-    name.textContent = tank.name;
+    name.textContent = tank.name + (options.mode === 'solo' && index === 1 ? ' · AI' : '');
     const health = document.createElement('small');
     health.textContent = tank.health > 0
       ? `${Math.ceil(tank.health)} HP${tank.shield ? ' · SHIELD' : ''}`
       : 'OUT';
     heading.append(name, health);
     const progress = document.createElement('progress');
-    progress.max = 100;
+    progress.max = tank.maxHealth || 100;
     progress.value = tank.health;
     progress.setAttribute('aria-label', `${tank.name} health`);
     card.append(heading, progress);
@@ -176,17 +266,71 @@ function playerCards() {
   $('players').replaceChildren(...elements);
 }
 
-function weaponButtons() {
-  const tank = match.players[match.active];
-  for (const button of $('weapons').children) {
-    const ammo = tank.ammo[button.dataset.weapon];
-    button.disabled = recording || ammo === 0;
-    button.setAttribute('aria-pressed', String(button.dataset.weapon === weaponId));
-    button.querySelector('small').textContent = ammo === null ? 'UNLIMITED' : `${ammo} LEFT`;
+function buildOrders() {
+  $('unit-picker').hidden = !frontline();
+  if (frontline()) {
+    const cards = friendlyUnits().map(unit => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'weapon';
+      button.setAttribute('aria-pressed', String(unit.id === selectedUnit));
+      button.disabled = locked();
+      const name = document.createElement('b');
+      name.textContent = unitNames[unit.type];
+      const health = document.createElement('small');
+      health.textContent = unit.health + ' HP';
+      button.append(name, health);
+      button.addEventListener('click', () => selectUnit(unit));
+      return button;
+    });
+    $('units').replaceChildren(...cards);
   }
-  const weapon = WEAPONS.find(item => item.id === weaponId);
+  const cards = orderOptions().map(weapon => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'weapon';
+    button.dataset.weapon = weapon.id;
+    button.disabled = locked() || weapon.ammo === 0;
+    const name = document.createElement('b');
+    name.textContent = weapon.name;
+    const ammo = document.createElement('small');
+    ammo.textContent = weapon.ammo === null ? 'UNLIMITED' : weapon.ammo + ' LEFT';
+    button.append(name, ammo);
+    button.addEventListener('click', () => {
+      weaponId = weapon.id;
+      if (weapon.targeted) setSupportTarget(weapon.id);
+      syncOrderControls();
+      queueDraw();
+    });
+    return button;
+  });
+  $('weapons').replaceChildren(...cards);
+  syncOrderControls();
+}
+
+function syncOrderControls() {
+  const weapon = orderOptions().find(item => item.id === weaponId);
+  if (!weapon) return;
+  for (const button of $('weapons').children) {
+    button.setAttribute('aria-pressed', String(button.dataset.weapon === weaponId));
+  }
+  const aiming = !weapon.targeted && !['hold', 'shield'].includes(weapon.id);
+  $('angle-row').hidden = !aiming;
+  $('power-row').hidden = !aiming;
+  $('target-row').hidden = !weapon.targeted;
   $('weapon-info').textContent = weapon.description;
-  $('fire').firstChild.textContent = weaponId === 'shield' ? 'Deploy shield ' : 'Fire ';
+  $('fire').firstChild.textContent = (actionLabels[weapon.id] || 'Fire') + ' ';
+  $('field-hint').textContent = weapon.targeted ? 'TAP THE FIELD TO SET TARGET' : 'DRAG TO AIM / ONE ORDER PER TURN';
+}
+
+function showObjective() {
+  $('objective-status').hidden = !frontline();
+  if (!frontline()) return;
+  const {owner, contested, goal} = match.objective;
+  let control = 'unoccupied';
+  if (contested) control = 'contested';
+  else if (owner !== null) control = 'held by ' + match.players[owner].name;
+  $('objective-status').textContent = 'RELAY ' + control.toUpperCase() + ' · TIDE ' + match.scores[0] + ' / ' + goal + ' · EMBER ' + match.scores[1] + ' / ' + goal;
 }
 
 function shareUrl() {
@@ -204,15 +348,17 @@ function renderMatch() {
   $('command').hidden = false;
   $('menu-button').hidden = false;
   $('menu-button').disabled = recording;
-  $('controls').hidden = waiting || ended;
+  $('controls').hidden = waiting || ended || botTurn();
+  $('bot-status').hidden = !botTurn() || recording;
+  $('orders-label').textContent = frontline() ? 'ORDERS' : 'ARSENAL';
   $('result').hidden = !ended;
   $('handoff').hidden = !waiting && !(ended && options.mode === 'link');
   $('continue').hidden = ended;
   $('active-title').textContent = ended
     ? (winner ? `${winner.name} wins` : 'Draw')
-    : (waiting ? 'Pass the turn' : `${tank.name}’s turn`);
+    : (waiting ? 'Pass the turn' : botTurn() ? 'Ember AI' : `${tank.name}’s turn`);
   $('result-copy').textContent = winner
-    ? `${winner.name} finished with ${Math.ceil(winner.health)} HP after ${match.history.length} shots.`
+    ? `${winner.name} finished with ${Math.ceil(winner.health)} HP after ${match.history.length} turns.`
     : `The battle ends in a draw after ${match.history.length} turns.`;
   $('map-label').textContent = MAPS.find(map => map.id === match.map).name.toUpperCase();
   const windDirection = match.wind < 0 ? '←' : '→';
@@ -225,33 +371,44 @@ function renderMatch() {
     $('copy').firstChild.textContent = ended ? 'Copy result link ' : 'Copy next-turn link ';
     $('handoff-copy').textContent = ended
       ? 'Send the final position to your opponent.'
-      : `Send this link to ${tank.name} so they can take their shot.`;
+      : `Send this link to ${tank.name} so they can take their turn.`;
   }
-  const locked = waiting || ended || recording;
-  field.classList.toggle('aiming', !locked);
-  field.tabIndex = locked ? -1 : 0;
-  for (const id of ['angle', 'power', 'move', 'fire']) $(id).disabled = locked;
+  field.classList.toggle('aiming', !locked());
+  field.tabIndex = locked() ? -1 : 0;
+  for (const id of ['angle', 'power', 'move', 'target', 'fire']) $(id).disabled = locked();
   playerCards();
-  weaponButtons();
+  showObjective();
+  if (!$('controls').hidden) buildOrders();
   drawMatch();
+  scheduleBot();
 }
 
 function drawMatch() {
   if (phase !== 'match' || recording) return;
-  if (waiting || match.winner !== null) {
+  if (locked()) {
     renderer.draw(match, {reducedMotion: motion.matches});
     return;
   }
   const command = getCommand();
-  const tank = previewTank(match, command.move);
-  const preview = predictShot(match, command);
-  const travel = Math.round(tank.x - match.players[match.active].x);
-  $('angle-value').textContent = `${command.angle}°`;
-  $('power-value').textContent = `${command.power}%`;
-  $('move-value').textContent = travel ? `${travel < 0 ? '←' : '→'} ${Math.abs(travel)} / 90` : '0 / 90';
+  const weapon = orderOptions().find(item => item.id === weaponId);
+  const preview = actionPreview(command);
+  aimTank = preview.tank;
+  const actor = frontline() ? match.units.find(unit => unit.id === selectedUnit) : match.players[match.active];
+  const travel = Math.round(aimTank.x - actor.x);
+  const direction = travel < 0 ? '← ' : '→ ';
+  $('angle-value').textContent = command.angle + '°';
+  $('power-value').textContent = command.power + '%';
+  $('move-value').textContent = (travel ? direction + Math.abs(travel) : '0') + ' / ' + $('move').max;
+  $('target-value').textContent = 'GRID ' + String(command.target).padStart(4, '0');
+  $('order-note').hidden = preview.valid !== false;
+  $('order-note').textContent = preview.reason || '';
+  $('fire').disabled = preview.valid === false;
   renderer.draw(match, {
     angle: command.angle,
-    previewTank: tank,
+    previewTank: aimTank,
+    selectedUnit,
+    target: weapon.targeted ? command.target : undefined,
+    action: command.weapon,
     paths: preview.paths.map(path => path.filter(point => point.t <= .65)),
     reducedMotion: motion.matches
   });
@@ -267,14 +424,15 @@ function queueDraw() {
 }
 
 function startMatch() {
-  const count = options.mode === 'link' ? 2 : options.count;
-  match = createMatch(makeConfig(options.map, count, seed()));
+  cancelBot();
+  match = createBoard(seed());
   waiting = false;
   clearLink();
   prepareTurn();
   renderMatch();
   const saved = saveMatch();
-  announce(saved ? 'Choose a weapon, line up your shot and fire.' : 'Match started. This browser could not save progress.');
+  const instruction = frontline() ? 'Choose a unit and issue its first order.' : 'Choose a weapon, line up your shot and fire.';
+  announce(saved ? instruction : 'Match started. This browser could not save progress.');
   field.focus({preventScroll: true});
 }
 
@@ -299,14 +457,17 @@ function tone(kind) {
 }
 
 function fire() {
-  if (phase !== 'match' || waiting || recording || match.winner !== null) return;
-  const command = getCommand();
+  if (phase !== 'match' || locked()) return;
+  performOrder(getCommand());
+}
+
+function performOrder(command) {
   let result;
   try {
-    result = resolveTurn(match, command);
-  } catch {
-    announce('This shot is unavailable. Choose another weapon and try again.');
-    return;
+    result = frontline() ? resolveFrontline(match, command) : resolveTurn(match, command);
+  } catch (error) {
+    announce(error.message || 'This order is unavailable.');
+    return false;
   }
   const before = match;
   const nextWaiting = options.mode === 'link' && result.state.winner === null;
@@ -315,7 +476,7 @@ function fire() {
   recording = true;
   renderMatch();
   if (matchMedia('(max-width: 860px)').matches) field.scrollIntoView({block: 'center'});
-  announce(`${shooter} ${command.weapon === 'shield' ? 'deploys a shield' : 'fires'}.`);
+  announce(shooter + (frontline() ? ' issues an order.' : ' fires.'));
   tone('fire');
   const finish = () => {
     match = result.state;
@@ -325,12 +486,12 @@ function fire() {
     renderMatch();
     announce(`${result.summary}${saved ? '' : ' Progress could not be saved on this device.'}`);
     const focus = match.winner !== null ? $('rematch') : waiting ? $('copy') : field;
-    focus.focus({preventScroll: true});
+    if (!botTurn()) focus.focus({preventScroll: true});
     readIncomingTurn();
   };
   if (motion.matches || !result.duration) {
     finish();
-    return;
+    return true;
   }
   const started = performance.now();
   const playbackRate = Math.max(1.35, result.duration / 3.5);
@@ -348,6 +509,9 @@ function fire() {
     renderer.draw(before, {
       angle: command.angle,
       previewTank: result.tank,
+      selectedUnit: command.unit,
+      target: command.target,
+      action: command.weapon,
       paths: result.paths,
       impacts: result.impacts,
       elapsed
@@ -355,6 +519,47 @@ function fire() {
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+  return true;
+}
+
+function cancelBot() {
+  clearTimeout(botTimer);
+  botTimer = null;
+  botWorker?.terminate();
+  botWorker = null;
+}
+
+function scheduleBot() {
+  if (!botTurn() || recording || botTimer !== null || botWorker) return;
+  const board = match;
+  const difficulty = options.difficulty;
+  botTimer = setTimeout(() => {
+    botTimer = null;
+    if (phase !== 'match' || recording || match !== board || !botTurn()) return;
+    function complete(command) {
+      if (phase !== 'match' || recording || match !== board || !botTurn()) return;
+      cancelBot();
+      if (command && performOrder(command)) return;
+      const fallback = frontline()
+        ? {unit: friendlyUnits()[0].id, move: 0, angle: 90, power: 60, weapon: 'hold', target: 600}
+        : {move: 0, angle: 138, power: 60, weapon: 'shell'};
+      performOrder(fallback);
+    }
+    function planHere() {
+      complete(planBotTurn(board, {difficulty}));
+    }
+    try {
+      botWorker = new Worker(new URL('./bot.js', import.meta.url), {type: 'module'});
+      botWorker.onmessage = event => complete(event.data);
+      botWorker.onerror = event => {
+        event.preventDefault();
+        planHere();
+      };
+      botWorker.postMessage({board, difficulty});
+    } catch {
+      planHere();
+    }
+  }, 520);
 }
 
 function clearReplacement() {
@@ -385,21 +590,15 @@ for (const map of MAPS) {
   });
   $('map-options').append(button);
 }
-for (const weapon of WEAPONS) {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'weapon';
-  button.dataset.weapon = weapon.id;
-  const label = document.createElement('b');
-  label.textContent = weapon.name;
-  button.append(label, document.createElement('small'));
-  button.addEventListener('click', () => {
-    weaponId = weapon.id;
-    weaponButtons();
-    queueDraw();
-  });
-  $('weapons').append(button);
-}
+$('scenario').addEventListener('change', () => {
+  options.scenario = $('scenario').value;
+  clearReplacement();
+  updateSetupPreview();
+});
+$('difficulty').addEventListener('change', () => {
+  options.difficulty = $('difficulty').value;
+  clearReplacement();
+});
 $('mode').addEventListener('change', () => {
   options.mode = $('mode').value;
   clearReplacement();
@@ -423,7 +622,8 @@ $('start').addEventListener('click', () => {
 $('resume').addEventListener('click', () => {
   options.map = match.map;
   options.count = match.players.length;
-  options.mode = savedMode;
+  Object.assign(options, savedSettings);
+  options.scenario = match.scenario || 'classic';
   prepareTurn();
   renderMatch();
   announce('Saved match resumed.');
@@ -432,7 +632,9 @@ $('import-button').addEventListener('click', () => {
   if (!incoming) return;
   if (match && match.winner === null && encodeTurn(match) !== encodeTurn(incoming) &&
       !window.confirm('Open this shared turn and replace your saved match?')) return;
+  cancelBot();
   match = incoming;
+  options.scenario = match.scenario || 'classic';
   options.mode = 'link';
   options.count = match.players.length;
   options.map = match.map;
@@ -444,10 +646,11 @@ $('import-button').addEventListener('click', () => {
   announce(saved ? 'Shared match opened.' : 'Shared match opened. Progress could not be saved.');
   (match.winner === null ? field : $('rematch')).focus({preventScroll: true});
 });
-let savedMode = 'local';
+let savedSettings;
 function openMenu() {
   if (recording) return;
-  savedMode = options.mode;
+  cancelBot();
+  savedSettings = {mode: options.mode, difficulty: options.difficulty};
   setSetup();
   announce('');
   $('start').focus({preventScroll: true});
@@ -479,13 +682,19 @@ $('sound').addEventListener('click', () => {
   $('sound').setAttribute('aria-pressed', String(sound));
   if (sound) tone('fire');
 });
-for (const id of ['angle', 'power', 'move']) $(id).addEventListener('input', queueDraw);
+for (const id of ['angle', 'power', 'move', 'target']) $(id).addEventListener('input', queueDraw);
 
 function aimAt(event) {
   const rect = field.getBoundingClientRect();
-  const tank = previewTank(match, Number($('move').value));
   const x = (event.clientX - rect.left) / rect.width * WIDTH;
   const y = (event.clientY - rect.top) / rect.height * HEIGHT;
+  const weapon = orderOptions().find(item => item.id === weaponId);
+  if (weapon.targeted) {
+    $('target').value = Math.round(x);
+    queueDraw();
+    return;
+  }
+  const tank = aimTank || (frontline() ? match.units.find(unit => unit.id === selectedUnit) : previewTank(match, Number($('move').value)));
   const angle = Math.atan2(Math.max(0, tank.y - 16 - y), x - tank.x) * 180 / Math.PI;
   $('angle').value = Math.round(angle);
   queueDraw();
@@ -501,7 +710,7 @@ field.addEventListener('pointermove', event => {
 });
 field.addEventListener('lostpointercapture', () => { pointerId = null; });
 window.addEventListener('keydown', event => {
-  if (phase !== 'match' || recording || waiting || match.winner !== null ||
+  if (phase !== 'match' || locked() ||
       event.altKey || event.ctrlKey || event.metaKey ||
       event.target.closest?.('input, button, select, a, summary')) return;
   const actions = {
@@ -509,6 +718,12 @@ window.addEventListener('keydown', event => {
     ArrowRight: ['angle', -1], ArrowUp: ['power', 1], ArrowDown: ['power', -1]
   };
   const action = actions[event.code];
+  if (frontline() && !$('target-row').hidden && ['ArrowLeft', 'ArrowRight'].includes(event.code)) {
+    event.preventDefault();
+    $('target').value = Number($('target').value) + (event.code === 'ArrowLeft' ? -12 : 12);
+    queueDraw();
+    return;
+  }
   if (action) {
     event.preventDefault();
     const [id, amount] = action;
@@ -529,6 +744,6 @@ window.addEventListener('resize', resizeField);
 window.addEventListener('hashchange', readIncomingTurn);
 
 readSavedMatch();
-savedMode = options.mode;
+savedSettings = {mode: options.mode, difficulty: options.difficulty};
 setSetup();
 readIncomingTurn();

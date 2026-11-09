@@ -22,14 +22,14 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/tanks-tools" --no-audit --no-fund playwright@1.64.1
           "$RUNNER_TEMP/tanks-tools/node_modules/.bin/playwright" install --with-deps --only-shell chromium
-      - name: Verify local, touch and shared turns
+      - name: Verify classic, Frontline, solo and shared turns
         env:
           PLAYWRIGHT_MODULE: ${{ runner.temp }}/tanks-tools/node_modules/playwright
         run: node tests/browser-smoke.cjs
       - name: Package public app
         run: |
           mkdir _site
-          cp index.html style.css icon.svg app.js engine.js renderer.js session.js .nojekyll _site/
+          cp index.html style.css icon.svg app.js engine.js frontline.js bot.js renderer.js session.js .nojekyll _site/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

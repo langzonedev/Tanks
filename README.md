@@ -1,26 +1,40 @@
 # Tanks
 
-A side-on turn-based artillery game from Lang Systems. Move into position, read the wind, and use one shot per turn to change the battlefield.
+A side-on turn-based strategy game from Lang Systems. Lead armour and infantry, call in air support, and use the changing terrain to your advantage.
 
 **[Play Tanks on GitHub Pages](https://langzonedev.github.io/Tanks/)**
 
 ## Play
 
-- **Pass & play** — Two to four players take turns on one device.
-- **Share turns** — Two people exchange a fresh turn link after each shot. Open the link and choose **Open shared turn** to resume the exact board.
-- Choose **Redline Badlands**, **Relay Ridge**, or **Salt Basin**. The seed gives each match a new terrain layout.
-- Move up to 90 units per turn, adjust angle and power, choose a weapon, then fire. A short trajectory guide shows the opening arc. On the battlefield, drag to aim.
-- On a keyboard, focus the battlefield and use **A/D** to move, **←/→** to aim, **↑/↓** for power, and **Space** to fire.
+Choose **Frontline** for combined arms or **Classic** for the original tank artillery rules.
 
-| Weapon | Effect | Charges per player |
-| --- | --- | --- |
-| Field Shell | Dependable damage and a small crater | Unlimited |
-| Bunker Buster | Large blast and a deep crater | 2 |
-| Cluster Charge | Three submunitions spread across the target area | 2 |
-| Groundbreaker | Cuts a narrow, deep trench | 2 |
-| Reactive Shield | Uses the turn to halve the next damaging impact | 1 |
+- **Solo** pits you against Ember AI at Recruit or Standard difficulty. It plays under the same rules and resource limits as you.
+- **Pass & play** uses one device. Frontline has two factions. Classic supports two to four players.
+- **Share turns** lets two people exchange a fresh turn link after each order. Open the link and choose **Open shared turn** to reconstruct the board.
 
-Last tank standing wins. At 120 turns the highest remaining armour wins, with a draw for tied leaders. The game saves one match locally after each resolved turn. Sharing uses a replay link exchanged between players, so there is no live room, account, or server-side match authority.
+### Frontline
+
+Each faction deploys a tank, a rifle squad and an anti-armour squad on mirrored terrain. Each also has one air raid and one reinforcement drop. Choose one unit, reposition, and issue one order per turn.
+
+| Unit or support | Tactical role |
+| --- | --- |
+| Tank | Lob shells over cover or spend a heavy round to open a larger crater |
+| Rifle squad | Use direct fire against infantry and move quickly to the relay |
+| Anti-armour squad | Use limited rockets against tanks |
+| Air raid | Strike a grid position, including friendly units inside the blast |
+| Air drop | Land a fresh rifle squad on clear ground |
+
+Occupy the central relay uncontested at the end of your turn to score one point. Reach four points or eliminate the enemy force to win. At 120 turns, relay points decide the match, followed by remaining force health and a draw if both tie.
+
+### Classic
+
+The original artillery rules retain fuel-limited movement, wind, five weapon choices, destructible terrain and last-tank-standing victory. Previous Classic turn links still open.
+
+### Controls
+
+Select a unit and order, then adjust movement, angle and power or set the target grid. Drag on the battlefield to aim. Tap the battlefield for targeted air support. The dotted trail shows the start of the shot. On a keyboard, focus the battlefield and use **A/D** to move, **←/→** to aim or adjust a target, **↑/↓** for power, and **Space** to confirm an order.
+
+The game saves one match locally after each resolved order. Separate-device play uses manually exchanged links. Each link carries the map seed and validated order history.
 
 ## Developer handoff
 
@@ -29,7 +43,7 @@ npm run verify
 npm start
 ```
 
-Open http://localhost:4174/ after starting the static server. No build or runtime packages are required. `engine.js` owns rules, `renderer.js` draws the scene, `app.js` owns interaction, and `session.js` serializes bounded, versioned replay commands. Preserve v1 replay outcomes or bump the replay version when changing deterministic rules.
+Open http://localhost:4174/ after starting the static server. No build or runtime packages are required. `engine.js` owns Classic, `frontline.js` owns combined arms, `bot.js` plans solo turns in a browser worker, and `renderer.js` draws both scenarios. `app.js` owns interaction and `session.js` handles replay v1 and v2. Preserve existing replay outcomes or add a protocol version when changing deterministic rules.
 
 GitHub Pages publishes through the workflow in `.github/workflows/pages.yml`. For a new Pages setup, select **GitHub Actions** under **Settings → Pages → Source**, then run **Verify and publish Tanks**. See [handoff and verification](docs/HANDOFF.md).
 

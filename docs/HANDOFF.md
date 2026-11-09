@@ -27,3 +27,17 @@ The static package uses relative assets under `/Tanks/`. GitHub Actions verifies
 | QA / CISO | qa_security | Independent engine and session tests, input boundary and recovery review |
 
 The independent suite verifies deterministic replay, artillery damage and deformation, movement bounds, limited weapons, shield behaviour, elimination, termination and rejection of malformed shared commands. The renderer was inspected at desktop and narrow widths with actual engine states. The Pages workflow includes automated Chromium checks across local play, save recovery, two-client exchange, same-tab share import and touch emulation. Physical-phone comfort and performance remain for human playtesting.
+
+
+## Frontline 2.0
+
+The operator expanded Tanks into a combined-arms game with a solo opponent. Frontline is the default battle type and Classic remains selectable. Equal forces, mirrored deployment and paired wind establish opening parity. First-turn initiative and battlefield balance remain playtest questions.
+
+- Technical Architect / Developer (tanks_engine) owns Frontline rules, symmetry checks and replay verification.
+- UX Designer (design_review) owns the unit silhouettes, faction markers, relay, air support effects and renderer review across desktop and narrow widths.
+- Core / Integration (root) owns the setup and order interface, AI planning, persistence, release and handoff.
+- QA / CISO (qa_security) owns independent rules, replay and bot legality checks.
+
+A solo bot chooses among bounded legal candidates using the visible battlefield. The worker runs only in Solo, and a saved human order schedules one reply when resumed. Old Classic saves and v1 links preserve their results. Frontline links use v2 order tuples, with strict unit ownership, resource and target checks.
+
+The browser gate exercises the desktop battlefield dimensions, narrow touch layout, air support, Classic four-player turns, solo recovery, and cross-client turn links. Physical phone comfort and game balance are human playtest items.
