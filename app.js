@@ -509,7 +509,7 @@ function performOrder(command) {
     prepareTurn();
     renderMatch();
     announce(`${result.summary}${saved ? '' : ' Progress could not be saved on this device.'}`);
-    focusMatch();
+    focusMatch(!botTurn());
     readIncomingTurn();
   };
   if (motion.matches || !result.duration) {

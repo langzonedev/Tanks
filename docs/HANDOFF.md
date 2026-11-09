@@ -42,10 +42,10 @@ A solo bot chooses among bounded legal candidates using the visible battlefield.
 
 The browser gate exercises the desktop battlefield dimensions, narrow touch layout, air support, Classic four-player turns, solo recovery, and cross-client turn links. Physical phone comfort and game balance are human playtest items.
 
-## Frontline 2.0.2 responsive playtest
+## Frontline 2.0.3 responsive playtest
 
-Live desktop play covered craters, a reinforcement drop and the AI response. At a compact browser viewport, choosing a weapon put the field above the visible page, so checking aim meant scrolling back and forth. The active battlefield now stays above the controls in phone portrait and sits beside them on tablets and in phone landscape. The canvas accepts normal scrolling when the selected order needs no aim.
+Live desktop play covered craters, a reinforcement drop and the AI response. At a compact browser viewport, choosing a weapon put the field above the visible page, so checking aim meant scrolling back and forth. The active battlefield now stays above the controls in phone portrait and sits beside them on tablets and in phone landscape. The canvas accepts normal scrolling when the selected order needs no aim. On short landscape screens, the order button stays within reach while the controls scroll.
 
-The Chromium gate exercises deployment, canvas targeting and an air raid at 320×568, 390×844, 667×375, 844×390, 768×1024 and 1024×768, plus the existing 1366×900 desktop check. It verifies that the field stays visible after choosing the raid and during landscape playback.
+The Chromium gate exercises deployment, canvas targeting and an air raid at 320×568, 390×844, 667×375, 844×390, 768×1024 and 1024×768, plus the existing 1366×900 desktop check. It verifies that the field stays visible after choosing the raid and during landscape playback. It also fires another shot after rotating into portrait.
 
 For the next physical phone test, start a Solo Frontline match, reposition a squad during deployment, then select Air Raid and tap the field to target it. Rotate the phone during the match and check that the field and fire controls are comfortable to use. Play a few matches at both Recruit and Standard to compare the AI pressure.

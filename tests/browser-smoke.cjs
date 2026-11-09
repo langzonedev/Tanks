@@ -113,6 +113,11 @@ async function run() {
         await press('Finish deployment');
         await press(/^Air Raid/);
         await boardInView();
+        if (width > height && touch) {
+          const action = await page.locator('#fire').boundingBox();
+          assert.ok(action.y >= 0 && action.y + action.height <= height,
+            `Landscape order button should stay within reach at ${width}×${height}`);
+        }
         const position = {x: Math.round((await canvas.boundingBox()).width * .72), y: 45};
         await (touch ? canvas.tap({position}) : canvas.click({position}));
         const target = Number(await page.locator('#target').inputValue());
@@ -125,6 +130,16 @@ async function run() {
         await page.getByRole('heading', {name: 'Ember’s turn'}).waitFor();
         assert.equal(await page.locator('#turn-label').textContent(), 'TURN 04');
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+        if (animate) {
+          await page.setViewportSize({width: height, height: width});
+          await page.locator('#field').evaluate(node => {
+            const box = node.getBoundingClientRect();
+            if (box.top < 0 || box.bottom > innerHeight) throw new Error('Field left the screen during rotation');
+          });
+          await press('Fire');
+          await page.getByRole('heading', {name: 'Tide’s turn'}).waitFor();
+          assert.equal(await page.locator('#turn-label').textContent(), 'TURN 05');
+        }
       } finally {
         await page.context().close();
       }
