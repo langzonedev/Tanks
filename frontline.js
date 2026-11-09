@@ -56,7 +56,8 @@ function teamCards(players, units) {
   });
 }
 
-export function createFrontline({ seed, map, players = ['Vanguard', 'Ember'] } = {}) {
+export function createFrontline({ seed, map, players = ['Vanguard', 'Ember'], rulesVersion = 3 } = {}) {
+  if (![2, 3].includes(rulesVersion)) throw new RangeError('Unknown Frontline rules version.');
   if (!Array.isArray(players) || players.length !== 2) throw new RangeError('Frontline requires two factions.');
   const base = createMatch({ seed, map, players });
   const terrain = base.terrain.map((height, x) => Math.round((height + base.terrain[WIDTH - x]) / 2));
@@ -69,7 +70,7 @@ export function createFrontline({ seed, map, players = ['Vanguard', 'Ember'] } =
     }
   }
   return {
-    ...base, scenario: 'frontline', terrain, units, wind: pairedWind(base.seed, 1), scores: [0, 0],
+    ...base, scenario: 'frontline', rulesVersion, terrain, units, wind: pairedWind(base.seed, 1), scores: [0, 0],
     players: teamCards(base.players.map((player) => ({ ...player, ammo: { 'air-raid': 1, 'air-drop': 1 } })), units),
     objective: { x: CENTRE, radius: OBJECTIVE_RADIUS, goal: OBJECTIVE_GOAL, owner: null, contested: false },
   };
@@ -79,11 +80,15 @@ export function frontlineMoveLimit(unit) {
   return UNIT_TYPES[unit?.type]?.move ?? 0;
 }
 
+export function isDeployment(state) {
+  return state.rulesVersion === 3 && state.turn <= 2;
+}
+
 export function frontlineWeapons(state, unitId) {
   const unit = state.units.find(({ id }) => id === unitId);
   if (!unit || unit.health <= 0) return [];
   const ammo = { ...unit.ammo, ...state.players[unit.team].ammo, hold: null };
-  return FRONTLINE_ACTIONS.filter((id) => Object.hasOwn(ammo, id)).map((id) => {
+  return FRONTLINE_ACTIONS.filter((id) => Object.hasOwn(ammo, id) && (!isDeployment(state) || id === 'hold')).map((id) => {
     const { name, description, color, targeted = false } = ACTIONS.get(id);
     return { id, name, description, ammo: ammo[id], color, targeted };
   });
@@ -100,6 +105,7 @@ function checkedCommand(state, command) {
     throw new RangeError('Choose valid movement, angle and power values for this unit.');
   }
   if (!integerWithin(target, EDGE, WIDTH - EDGE)) throw new RangeError('Choose a target inside the battlefield.');
+  if (isDeployment(state) && weapon !== 'hold') throw new RangeError('Opening orders are for deployment only. Reposition a unit or hold.');
   const action = frontlineWeapons(state, unit).find(({ id }) => id === weapon);
   if (!action || action.ammo === 0) throw new RangeError('This unit cannot use that action.');
   return { command: { unit, move, angle, power, weapon, target }, selected };
@@ -302,7 +308,8 @@ function resolve(state, input, record) {
   for (const unit of units) unit.y = terrain[unit.x];
   const scores = [...state.scores];
   const objective = control(units, state.objective);
-  const scored = objective.owner === state.active;
+  const secured = objective.owner === state.active;
+  const scored = secured && !isDeployment(state) && (state.rulesVersion === 2 || state.objective.owner === state.active);
   if (scored) scores[state.active]++;
   const cards = teamCards(players, units);
   const winner = decideWinner(cards, scores, state.turn);
@@ -318,6 +325,7 @@ function resolve(state, input, record) {
   } else if (visual.impacts.length && action.depth) summary.push(`${team.name} reshaped the battlefield.`);
   else summary.push(`${team.name} missed.`);
   if (scored) summary.push(`${team.name} scores control ${scores[state.active]}/${OBJECTIVE_GOAL}.`);
+  else if (secured) summary.push(team.name + ' takes the relay. Hold it through the opposing turn to score.');
   else if (objective.contested) summary.push('Control is contested.');
   return {
     ...visual, summary: summary.join(' '),

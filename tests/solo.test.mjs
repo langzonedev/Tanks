@@ -25,6 +25,13 @@ for (const [label, start, resolve, humanShot] of [
         const result = resolve(state, shot).state;
         assert.equal(result.history.length, state.history.length + 1);
         assert.equal(result.active, 0);
+        if (label === 'Frontline') {
+          assert.equal(shot.weapon, 'hold');
+          const combat = resolve(result, humanShot).state;
+          const reply = planBotTurn(combat, {difficulty});
+          assert.deepEqual(reply, planBotTurn(combat, {difficulty}));
+          assert.equal(resolve(combat, reply).state.active, 0);
+        }
       }
     }
   });

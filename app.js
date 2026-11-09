@@ -1,10 +1,10 @@
 import {
   WIDTH, HEIGHT, MAPS, WEAPONS, createMatch, predictShot, previewTank, resolveTurn
 } from './engine.js';
-import {createFrontline, frontlineWeapons, frontlineMoveLimit, previewFrontline, resolveFrontline} from './frontline.js';
-import {planBotTurn} from './bot.js';
+import {createFrontline, frontlineWeapons, frontlineMoveLimit, isDeployment, previewFrontline, resolveFrontline} from './frontline.js?v=2.0.1';
+import {planBotTurn} from './bot.js?v=2.0.1';
 import BattlefieldRenderer from './renderer.js?v=2';
-import {decodeTurn, encodeTurn, makeConfig} from './session.js?v=2';
+import {decodeTurn, encodeTurn, makeConfig} from './session.js?v=2.0.1';
 
 const $ = id => document.getElementById(id);
 const field = $('field');
@@ -28,6 +28,7 @@ let aimTank = null;
 const unitNames = {tank: 'Tank', rifle: 'Rifle squad', rocket: 'AT squad'};
 const actionLabels = {shield: 'Deploy shield', 'air-raid': 'Call air raid', 'air-drop': 'Drop reinforcements', hold: 'Hold position'};
 const frontline = () => match?.scenario === 'frontline';
+const deployment = () => frontline() && isDeployment(match);
 const botTurn = () => options.mode === 'solo' && match?.active === 1 && match.winner === null;
 const locked = () => waiting || recording || match.winner !== null || botTurn();
 
@@ -318,9 +319,13 @@ function syncOrderControls() {
   $('angle-row').hidden = !aiming;
   $('power-row').hidden = !aiming;
   $('target-row').hidden = !weapon.targeted;
-  $('weapon-info').textContent = weapon.description;
-  $('fire').firstChild.textContent = (actionLabels[weapon.id] || 'Fire') + ' ';
-  $('field-hint').textContent = weapon.targeted ? 'TAP THE FIELD TO SET TARGET' : 'DRAG TO AIM / ONE ORDER PER TURN';
+  $('orders-label').hidden = deployment();
+  $('weapons').hidden = deployment();
+  $('weapon-info').textContent = deployment()
+    ? 'Reposition one unit or hold. Attacks and air support unlock after both sides deploy.'
+    : weapon.description;
+  $('fire').firstChild.textContent = (deployment() ? 'Finish deployment' : actionLabels[weapon.id] || 'Fire') + ' ';
+  $('field-hint').textContent = deployment() ? 'DEPLOYMENT / POSITION ONE UNIT' : weapon.targeted ? 'TAP THE FIELD TO SET TARGET' : 'DRAG TO AIM / ONE ORDER PER TURN';
 }
 
 function showObjective() {
@@ -350,6 +355,7 @@ function renderMatch() {
   $('menu-button').disabled = recording;
   $('controls').hidden = waiting || ended || botTurn();
   $('bot-status').hidden = !botTurn() || recording;
+  $('bot-status').textContent = deployment() ? 'Ember is choosing a deployment position.' : 'Ember is planning an order.';
   $('orders-label').textContent = frontline() ? 'ORDERS' : 'ARSENAL';
   $('result').hidden = !ended;
   $('handoff').hidden = !waiting && !(ended && options.mode === 'link');
@@ -362,7 +368,7 @@ function renderMatch() {
     : `The battle ends in a draw after ${match.history.length} turns.`;
   $('map-label').textContent = MAPS.find(map => map.id === match.map).name.toUpperCase();
   const windDirection = match.wind < 0 ? '←' : '→';
-  $('wind-label').textContent = match.wind ? `WIND ${windDirection} ${Math.abs(match.wind)}` : 'WIND CALM';
+  $('wind-label').textContent = deployment() ? 'DEPLOYMENT' : match.wind ? `WIND ${windDirection} ${Math.abs(match.wind)}` : 'WIND CALM';
   $('turn-label').textContent = `TURN ${String(match.turn).padStart(2, '0')}`;
   $('seed-label').textContent = `FIELD ${match.seed.toString(16).toUpperCase().padStart(8, '0')}`;
   $('field-hint').textContent = ended ? 'MATCH COMPLETE' : waiting ? 'NEXT TURN READY' : 'DRAG TO AIM / ONE SHOT PER TURN';
@@ -431,7 +437,7 @@ function startMatch() {
   prepareTurn();
   renderMatch();
   const saved = saveMatch();
-  const instruction = frontline() ? 'Choose a unit and issue its first order.' : 'Choose a weapon, line up your shot and fire.';
+  const instruction = deployment() ? 'Choose a unit and set its opening position.' : frontline() ? 'Choose a unit and issue its first order.' : 'Choose a weapon, line up your shot and fire.';
   announce(saved ? instruction : 'Match started. This browser could not save progress.');
   field.focus({preventScroll: true});
 }
@@ -549,7 +555,7 @@ function scheduleBot() {
       complete(planBotTurn(board, {difficulty}));
     }
     try {
-      botWorker = new Worker(new URL('./bot.js', import.meta.url), {type: 'module'});
+      botWorker = new Worker(new URL('./bot.js?v=2.0.1', import.meta.url), {type: 'module'});
       botWorker.onmessage = event => complete(event.data);
       botWorker.onerror = event => {
         event.preventDefault();

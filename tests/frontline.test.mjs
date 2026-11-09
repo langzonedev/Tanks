@@ -13,6 +13,7 @@ const initial = () => createFrontline(config);
 const command = (unit, options = {}) => ({
   unit, move: 0, angle: 45, power: 65, weapon: 'hold', target: 600, ...options,
 });
+const combat = () => replayFrontline(config, [command(0), command(3)]);
 const pack = payload => Buffer.from(JSON.stringify(payload)).toString('base64url');
 
 function teamUnits(state, team) {
@@ -57,7 +58,7 @@ test('Frontline starts every map with mirrored terrain, equal squads, equal rese
 });
 
 test('mirrored tank attacks have matching range, damage and terrain deformation', () => {
-  const first = initial();
+  const first = combat();
   const [left] = teamUnits(first, 0);
   const [right] = teamUnits(first, 1);
   const second = resolveFrontline(first, command(left.id)).state;
@@ -76,7 +77,7 @@ test('mirrored tank attacks have matching range, damage and terrain deformation'
 });
 
 test('preview and replay are deterministic and reject wrong-side, out-of-range and incompatible commands', () => {
-  const state = initial();
+  const state = combat();
   const before = structuredClone(state);
   const ownTank = teamUnits(state, 0).find(unit => unit.type === 'tank');
   const ownRifle = teamUnits(state, 0).find(unit => unit.type === 'rifle');
@@ -86,13 +87,13 @@ test('preview and replay are deterministic and reject wrong-side, out-of-range a
   const resolved = resolveFrontline(state, shoot);
   assert.deepEqual(state, before);
   assert.deepEqual(preview.impacts, resolved.impacts);
-  assert.deepEqual(replayFrontline(config, [shoot]), resolved.state);
+  assert.deepEqual(replayFrontline(config, [...state.history, shoot]), resolved.state);
   for (const forged of [
     command(opposite.id), command(-1), command(1.5), command(ownRifle.id, {weapon: 'heavy'}),
     command(ownTank.id, {move: frontlineMoveLimit(ownTank) + 1}),
     command(ownTank.id, {target: WIDTH + 1}), command(ownTank.id, {angle: 181}),
     command(ownTank.id, {power: NaN}), command(ownTank.id, {weapon: 'constructor'}),
-  ]) assert.throws(() => replayFrontline(config, [forged]));
+  ]) assert.throws(() => replayFrontline(config, [...state.history, forged]));
 });
 
 test('published v1 token still reconstructs its exact historical shot, crater and shield state', () => {
@@ -107,17 +108,17 @@ test('published v1 token still reconstructs its exact historical shot, crater an
     '72680da01cbbdcbd44151d5d670c5b8677a1c2554afe60c14bb03763b3379bc9');
 });
 
-test('v2 exchanges reconstruct the exact state and reject illegal history or settings', () => {
+test('v3 exchanges reconstruct the exact state and reject illegal history or settings', () => {
   const start = initial();
   const one = resolveFrontline(start, command(teamUnits(start, 0)[0].id)).state;
   const two = resolveFrontline(one, command(teamUnits(one, 1)[0].id)).state;
   const token = encodeTurn(two);
   assert.deepEqual(decodeTurn(token), two);
   const envelope = JSON.parse(Buffer.from(token, 'base64url').toString());
-  assert.equal(envelope[0], 2);
+  assert.equal(envelope[0], 3);
   const [version, seed, map, count, [first]] = envelope;
   for (const modified of [
-    [3, seed, map, count, []], [version, seed, map, 4, []], [version, seed, 'constructor', count, []],
+    [4, seed, map, count, []], [version, seed, map, 4, []], [version, seed, 'constructor', count, []],
     [version, seed, map, count, [[...first, 0]]],
     [version, seed, map, count, [[teamUnits(start, 1)[0].id, ...first.slice(1)]]],
     [version, seed, map, count, [[...first.slice(0, 4), -1, first[5]]]],
@@ -128,7 +129,7 @@ test('v2 exchanges reconstruct the exact state and reject illegal history or set
 });
 
 test('capture advances only on the occupying team’s turn, contested ground stalls, and target score ends the match', () => {
-  const state = initial();
+  const state = combat();
   const [tide] = teamUnits(state, 0);
   const [ember] = teamUnits(state, 1);
   const moveTo = (unit, x) => { unit.x = x; unit.y = state.terrain[x]; };
@@ -152,7 +153,7 @@ test('capture advances only on the occupying team’s turn, contested ground sta
 });
 
 test('an occupied landing rejects a reinforcement, while a clear landing consumes only the acting team’s reserve', () => {
-  const state = initial();
+  const state = combat();
   const [tide] = teamUnits(state, 0);
   const [ember] = teamUnits(state, 1);
   const blocked = command(tide.id, {weapon: 'air-drop', target: ember.x});
@@ -175,7 +176,7 @@ test('an occupied landing rejects a reinforcement, while a clear landing consume
 });
 
 test('rifles can hit infantry without cutting ground, and the anti-armour rocket punches through tank armour', () => {
-  const state = initial();
+  const state = combat();
   state.terrain.fill(450);
   for (const unit of state.units) unit.y = state.terrain[unit.x];
   const ownRifle = teamUnits(state, 0).find(unit => unit.type === 'rifle');
@@ -200,8 +201,8 @@ test('rifles can hit infantry without cutting ground, and the anti-armour rocket
   assert.ok(rocket.state.terrain.some(y => y > 450));
 });
 
-test('an air raid consumes the acting team’s one charge and can be exchanged in v2 history', () => {
-  const state = initial();
+test('an air raid consumes the acting team’s one charge and can be exchanged in v3 history', () => {
+  const state = combat();
   const [tide] = teamUnits(state, 0);
   const [ember] = teamUnits(state, 1);
   const attack = command(tide.id, {weapon: 'air-raid', target: ember.x});
@@ -212,4 +213,40 @@ test('an air raid consumes the acting team’s one charge and can be exchanged i
   assert.deepEqual(decodeTurn(encodeTurn(outcome.state)), outcome.state);
   const returned = resolveFrontline(outcome.state, command(ember.id)).state;
   assert.throws(() => resolveFrontline(returned, attack));
+});
+
+
+test('both sides reposition without spending weapons before v3 combat unlocks', () => {
+  let state = initial();
+  const baseline = structuredClone(state);
+  for (const id of [0, 3]) {
+    assert.deepEqual(frontlineWeapons(state, id).map(action => action.id), ['hold']);
+    for (const weapon of ['shell', 'air-raid', 'air-drop']) {
+      assert.throws(() => resolveFrontline(state, command(id, {weapon})), /deployment only/);
+    }
+    state = resolveFrontline(state, command(id, {move: id === 0 ? 30 : -30})).state;
+  }
+  assert.equal(state.turn, 3);
+  assert.equal(state.units[0].x - baseline.units[0].x, 30);
+  assert.equal(state.units[3].x - baseline.units[3].x, -30);
+  assert.deepEqual(state.units.map(unit => unit.ammo), baseline.units.map(unit => unit.ammo));
+  assert.deepEqual(state.players.map(team => team.ammo), baseline.players.map(team => team.ammo));
+  assert.deepEqual(state.terrain, baseline.terrain);
+  assert.deepEqual(state.scores, [0, 0]);
+  assert.ok(frontlineWeapons(state, 0).some(action => action.id === 'shell'));
+});
+
+test('new captures need an opposing reply and published v2 replays retain immediate points', () => {
+  const drop = command(0, {weapon: 'air-drop', target: 600});
+  const taken = resolveFrontline(combat(), drop).state;
+  assert.equal(taken.objective.owner, 0);
+  assert.deepEqual(taken.scores, [0, 0]);
+  const held = resolveFrontline(taken, command(3)).state;
+  const scored = resolveFrontline(held, command(0)).state;
+  assert.deepEqual(scored.scores, [1, 0]);
+  const oldToken = pack([2, config.seed, config.map, 2, [[0, 0, 45, 65, 5, 600]]]);
+  const old = decodeTurn(oldToken);
+  assert.equal(old.rulesVersion, 2);
+  assert.deepEqual(old.scores, [1, 0]);
+  assert.equal(encodeTurn(old), oldToken);
 });

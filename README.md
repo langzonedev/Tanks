@@ -14,7 +14,7 @@ Choose **Frontline** for combined arms or **Classic** for the original tank arti
 
 ### Frontline
 
-Each faction deploys a tank, a rifle squad and an anti-armour squad on mirrored terrain. Each also has one air raid and one reinforcement drop. Choose one unit, reposition, and issue one order per turn.
+Each faction deploys a tank, a rifle squad and an anti-armour squad on mirrored terrain. Each also has one air raid and one reinforcement drop. Both sides get a deployment turn to reposition one unit or hold. Combat and air support unlock after both deployments. Then choose one unit, reposition, and issue one order per turn.
 
 | Unit or support | Tactical role |
 | --- | --- |
@@ -24,7 +24,7 @@ Each faction deploys a tank, a rifle squad and an anti-armour squad on mirrored 
 | Air raid | Strike a grid position, including friendly units inside the blast |
 | Air drop | Land a fresh rifle squad on clear ground |
 
-Occupy the central relay uncontested at the end of your turn to score one point. Reach four points or eliminate the enemy force to win. At 120 turns, relay points decide the match, followed by remaining force health and a draw if both tie.
+Take the relay and hold it uncontested through the opponent’s turn. Each turn you finish with control after that scores one point. Reach four points or eliminate the enemy force to win. At 120 turns, relay points decide the match, followed by remaining force health and a draw if both tie.
 
 ### Classic
 
@@ -43,7 +43,7 @@ npm run verify
 npm start
 ```
 
-Open http://localhost:4174/ after starting the static server. No build or runtime packages are required. `engine.js` owns Classic, `frontline.js` owns combined arms, `bot.js` plans solo turns in a browser worker, and `renderer.js` draws both scenarios. `app.js` owns interaction and `session.js` handles replay v1 and v2. Preserve existing replay outcomes or add a protocol version when changing deterministic rules.
+Open http://localhost:4174/ after starting the static server. No build or runtime packages are required. `engine.js` owns Classic, `frontline.js` owns combined arms, `bot.js` plans solo turns in a browser worker, and `renderer.js` draws both scenarios. `app.js` owns interaction and `session.js` handles Classic v1 and Frontline v2/v3 replays. Preserve existing replay outcomes or add a protocol version when changing deterministic rules.
 
 GitHub Pages publishes through the workflow in `.github/workflows/pages.yml`. For a new Pages setup, select **GitHub Actions** under **Settings → Pages → Source**, then run **Verify and publish Tanks**. See [handoff and verification](docs/HANDOFF.md).
 

@@ -38,6 +38,6 @@ The operator expanded Tanks into a combined-arms game with a solo opponent. Fron
 - Core / Integration (root) owns the setup and order interface, AI planning, persistence, release and handoff.
 - QA / CISO (qa_security) owns independent rules, replay and bot legality checks.
 
-A solo bot chooses among bounded legal candidates using the visible battlefield. The worker runs only in Solo, and a saved human order schedules one reply when resumed. Old Classic saves and v1 links preserve their results. Frontline links use v2 order tuples, with strict unit ownership, resource and target checks.
+A solo bot chooses among bounded legal candidates using the visible battlefield. The worker runs only in Solo, and a saved human order schedules one reply when resumed. Old Classic saves and v1 links preserve their results. Frontline links use v2 or v3 order tuples with strict unit ownership, resource and target checks. V3 gives both factions a deployment-only opening turn and requires a faction to keep control through the opposing turn before scoring. V2 matches keep their original immediate capture scoring.
 
 The browser gate exercises the desktop battlefield dimensions, narrow touch layout, air support, Classic four-player turns, solo recovery, and cross-client turn links. Physical phone comfort and game balance are human playtest items.

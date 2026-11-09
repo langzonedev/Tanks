@@ -1,5 +1,5 @@
 import {MAPS, MAX_TURNS, WEAPONS, replayMatch} from './engine.js';
-import {FRONTLINE_ACTIONS, replayFrontline} from './frontline.js';
+import {FRONTLINE_ACTIONS, replayFrontline} from './frontline.js?v=2.0.1';
 
 export const CALLSIGNS = ['Tide', 'Ember', 'Violet', 'Gold'];
 const CODE_LIMIT = 10000;
@@ -14,7 +14,7 @@ export function encodeTurn(state) {
     if (frontline) return [unit, move, angle, power, FRONTLINE_ACTIONS.indexOf(weapon), target];
     return [move, angle, power, WEAPONS.findIndex(entry => entry.id === weapon)];
   });
-  const payload = JSON.stringify([frontline ? 2 : 1, state.seed, state.map, state.players.length, commands]);
+  const payload = JSON.stringify([frontline ? state.rulesVersion : 1, state.seed, state.map, state.players.length, commands]);
   return btoa(payload).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
 }
 
@@ -25,7 +25,7 @@ export function decodeTurn(code) {
   const payload = JSON.parse(atob(code.replaceAll('-', '+').replaceAll('_', '/')));
   if (!Array.isArray(payload) || payload.length !== 5) throw new Error('Invalid turn link');
   const [version, seed, map, count, turns] = payload;
-  const frontline = version === 2;
+  const frontline = version === 2 || version === 3;
   if ((version !== 1 && !frontline) || !Number.isInteger(seed) || seed < 0 || seed > 0xffffffff ||
       !MAPS.some(entry => entry.id === map) || !Number.isInteger(count) || count < 2 || count > 4 ||
       (frontline && count !== 2) || !Array.isArray(turns) || turns.length > MAX_TURNS) {
@@ -47,5 +47,5 @@ export function decodeTurn(code) {
     return {move, angle, power, weapon: weapon.id};
   });
   const config = makeConfig(map, count, seed);
-  return frontline ? replayFrontline(config, commands) : replayMatch(config, commands);
+  return frontline ? replayFrontline({...config, rulesVersion: version}, commands) : replayMatch(config, commands);
 }

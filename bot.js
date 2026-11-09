@@ -1,5 +1,5 @@
 import {MAX_MOVE, WEAPONS, predictShot} from './engine.js';
-import {frontlineMoveLimit, frontlineWeapons, previewFrontline} from './frontline.js';
+import {frontlineMoveLimit, frontlineWeapons, previewFrontline} from './frontline.js?v=2.0.1';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const take = (values, standard) => standard ? values : values.filter((_, index) => index % 2 === 0);
@@ -43,7 +43,13 @@ function frontlineScore(board, units, preview, command) {
     }
   }
   if (command.weapon === 'air-drop' && holdsCentre({x: command.target})) ours = true;
-  if (ours && !theirs) score += board.scores[board.active] + 1 >= board.objective.goal ? 180 : 31;
+  if (ours && !theirs) {
+    const maintained = board.rulesVersion === 2 || board.objective.owner === board.active;
+    score += maintained && board.scores[board.active] + 1 >= board.objective.goal ? 180 : maintained ? 33 : 26;
+  }
+  if (theirs && board.objective.owner === 1 - board.active) {
+    score += ours ? 25 : -15;
+  }
   const advance = Math.abs(preview.tank.x - board.objective.x);
   const current = units.find(unit => unit.id === command.unit);
   score += (Math.abs(current.x - board.objective.x) - advance) / 13;
@@ -58,7 +64,7 @@ function targetChoices(actor, enemies, board, weapon) {
   if (weapon === 'air-drop') {
     const direction = Math.sign(board.objective.x - actor.x) || 1;
     const near = board.objective.x - direction * (board.objective.radius + 35);
-    return [board.objective.x, near, near - direction * 52, actor.x + direction * 55, actor.x - direction * 55];
+    return [board.objective.x, board.objective.x - direction * 64, board.objective.x + direction * 64, near, near - direction * 52, actor.x + direction * 55, actor.x - direction * 55];
   }
   return enemies.map(unit => unit.x);
 }
