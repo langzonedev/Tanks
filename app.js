@@ -456,21 +456,38 @@ function startMatch() {
   focusMatch(true);
 }
 
+function texture(context, output, layers) {
+  const now = context.currentTime;
+  for (const [delay, duration, frequency, resonance, level] of layers) {
+    const source = context.createBufferSource();
+    const frames = Math.ceil(context.sampleRate * duration);
+    source.buffer = context.createBuffer(1, frames, context.sampleRate);
+    const data = source.buffer.getChannelData(0);
+    for (let i = 0; i < frames; i++) {
+      const attack = Math.min(1, i / (context.sampleRate * .0015));
+      data[i] = (Math.random() * 2 - 1) * attack * (1 - i / frames) ** 2;
+    }
+    const filter = context.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = frequency;
+    filter.Q.value = resonance;
+    const gain = context.createGain();
+    gain.gain.value = level;
+    source.connect(filter).connect(gain).connect(output);
+    source.start(now + delay);
+  }
+}
+
 function tone(kind) {
   if (!sound) return;
   try {
-    audio ??= new AudioContext();
-    const oscillator = audio.createOscillator();
-    const gain = audio.createGain();
-    const now = audio.currentTime;
-    oscillator.type = kind === 'impact' ? 'triangle' : 'sawtooth';
-    oscillator.frequency.setValueAtTime(kind === 'impact' ? 118 : 220, now);
-    oscillator.frequency.exponentialRampToValueAtTime(34, now + .18);
-    gain.gain.setValueAtTime(.10, now);
-    gain.gain.exponentialRampToValueAtTime(.001, now + .25);
-    oscillator.connect(gain).connect(audio.destination);
-    oscillator.start();
-    oscillator.stop(now + .26);
+    const Audio = window.AudioContext || window.webkitAudioContext;
+    audio ??= new Audio();
+    if (audio.state === 'suspended') void audio.resume().catch(() => {});
+    texture(audio, audio.destination, kind === 'impact' ? [
+      [0, .06, 1200, .55, .52], [.007, .43, 145, .65, .85],
+      [.048, .29, 380, .6, .45], [.13, .21, 980, .65, .22],
+    ] : [[0, .047, 1700, .62, .47], [.003, .19, 210, .7, .62]]);
   } catch {
     // Sound is optional.
   }
